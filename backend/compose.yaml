@@ -1,6 +1,7 @@
-# Three containers: frontend, backend (uvicorn), db.
-# Local day-to-day development uses host uvicorn + npm; start only db:
-#   docker compose up db -d
+# Local dev: only the DB runs in Docker.
+# Start with:  docker compose up -d
+# Then run backend:  cd backend && uvicorn main:app --reload
+# And frontend:      cd frontend && npm run dev
 
 services:
   db:
@@ -47,6 +48,5 @@ services:
       - "3000:80"
     depends_on:
       - backend
-
 volumes:
   pgdata:

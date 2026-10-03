@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { DashboardHeader } from './components/DashboardHeader'
-import { LessonDashboard } from './components/LessonDashboard'
+import { LearnView } from './components/learn/LearnView'
+import { VocabularyView } from './components/learn/VocabularyView'
 import { MobileNavigation, Sidebar } from './components/Sidebar'
 import './App.css'
 
@@ -13,7 +14,9 @@ function App() {
       <div className="workspace" id="nauka">
         <DashboardHeader />
         {activeItem === 'Moja nauka' ? (
-          <LessonDashboard onNavigate={setActiveItem} />
+          <LearnView />
+        ) : activeItem === 'Słownictwo' ? (
+          <VocabularyView />
         ) : (
           <main className="placeholder-view">
             <span className="eyebrow eyebrow--green">wMig</span>
