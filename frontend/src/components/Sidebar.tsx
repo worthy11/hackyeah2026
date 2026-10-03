@@ -4,10 +4,10 @@ type NavigationItem = { label: string; icon: IconName }
 type NavigationProps = { activeItem: string; onNavigate: (label: string) => void }
 
 const learningItems = [
+  { label: 'Tłumacz', icon: 'translate' },
   { label: 'Moja nauka', icon: 'dashboard' },
   { label: 'Słownictwo', icon: 'vocabulary' },
   { label: 'Rozmowy', icon: 'conversation' },
-  { label: 'Tłumaczenie', icon: 'translate' },
   { label: 'Moje materiały', icon: 'materials' },
 ] satisfies NavigationItem[]
 

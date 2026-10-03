@@ -9,9 +9,12 @@ This part is completed by proving that the provided avatar can be rigged using M
 Available gestures and phrases are grouped by topic. Start with common topics, such as:
 
 - greetings / small talk
+- family members
 - describing appearance (height, weight, hair color/length, etc.)
 - describing emotions (joy, anger, sadness, surprise, etc.)
-- de
+- directions and transport
+- foods
+- etc.
 
 ### B: Translation help
 

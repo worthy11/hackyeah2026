@@ -2,16 +2,17 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  font-family: inherit;
 }
 
 :root {
-  font-family: 'Trebuchet MS', Arial, sans-serif;
+  font-family: 'Nunito', 'Trebuchet MS', Arial, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   color: #1e2b28;
   background: #f4f4ef;
   font-weight: 400;
-  --green: #155b48;
+  --green: #1e7d5e;
   --text: #1e2b28;
   --text-soft: #34413b;
   --muted: #52615a;

@@ -1,6 +1,7 @@
-# Three containers: frontend, backend (uvicorn), db.
-# Local day-to-day development uses host uvicorn + npm; start only db:
-#   docker compose up db -d
+# Local dev: only the DB runs in Docker.
+# Start with:  docker compose up -d
+# Then run backend:  cd backend && uvicorn main:app --reload
+# And frontend:      cd frontend && npm run dev
 
 services:
   db:
@@ -19,33 +20,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  backend:
-    build:
-      context: ..
-      dockerfile: backend/docker/Dockerfile
-    restart: unless-stopped
-    environment:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/app
-      CORS_ORIGINS: "http://localhost:5173,http://localhost:3000,http://localhost"
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-    # Runs: uvicorn main:app --host 0.0.0.0 --port 8000
-
-  frontend:
-    build:
-      context: ..
-      dockerfile: backend/docker/Dockerfile.frontend
-      args:
-        VITE_API_URL: ""
-    restart: unless-stopped
-    ports:
-      - "3000:80"
-    depends_on:
-      - backend
 
 volumes:
   pgdata:
