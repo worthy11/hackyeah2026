@@ -4,10 +4,31 @@
   box-sizing: border-box;
 }
 
+:root {
+  font-family: 'Trebuchet MS', Arial, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  color: #1e2b28;
+  background: #f4f4ef;
+  font-weight: 400;
+  --green: #155b48;
+  --text: #1e2b28;
+  --text-soft: #34413b;
+  --muted: #52615a;
+  --line: #d9ddd6;
+  --surface: #fbfbf8;
+}
+
 body {
   margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
 }
 
 #root {
   min-height: 100vh;
+}
+
+button {
+  color: inherit;
 }
