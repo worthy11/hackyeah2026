@@ -75,7 +75,7 @@ jobs:
           az containerapp update \
             --name "$API_APP_NAME" \
             --resource-group "$RESOURCE_GROUP" \
-            --set-env-vars "CORS_ORIGINS=[\"https://${WEB_FQDN}\"]"
+            --set-env-vars "CORS_ORIGINS=https://${WEB_FQDN}"
 
           az containerapp update \
             --name "$WEB_APP_NAME" \

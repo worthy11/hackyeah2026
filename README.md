@@ -104,9 +104,20 @@ One-time Azure setup, then every push to `main` redeploys automatically. Workflo
 | API + web | Azure Container Apps (2 apps) |
 | Database | Azure Database for PostgreSQL Flexible Server |
 
-Use [Azure Cloud Shell](https://shell.azure.com/) (bash) or local Azure CLI + Docker.
+Commands below are **PowerShell**. Set these once at the start of a session (edit to match your names):
 
-Replace placeholders: `<uniqueAcrName>`, `<unique-pg-name>`, `<StrongPassword123!>`, `<SUBSCRIPTION_ID>`.
+```powershell
+$RG = "hackyeah2026"
+$LOCATION = "swedencentral"   # must be allowed by your subscription policy
+$ACR_NAME = "hackyeah2026acr" # globally unique, letters/numbers only
+$PG_NAME = "hackyeah2026pg"   # globally unique
+$PG_PASSWORD = "ChangeMe_StrongPass123!"
+$API_APP = "ca-hackyeah-api"
+$WEB_APP = "ca-hackyeah-web"
+$CAE = "cae-hackyeah"
+```
+
+If a region fails with `RequestDisallowedByAzure`, try another (e.g. `eastus`, `northeurope`). Resource groups and services should use an **allowed** location.
 
 ---
 
@@ -120,99 +131,105 @@ Replace placeholders: `<uniqueAcrName>`, `<unique-pg-name>`, `<StrongPassword123
 
 ### Step 1 — Push this project to GitHub (`main`)
 
-```bash
-cd /path/to/hackyeah-2026
+```powershell
+cd "C:\Users\slota\Documents\VS Code\Hackathony\hackyeah-2026"
 
 git add .
 git commit -m "Initial scaffold"
-gh repo create hackyeah-2026 --private --source=. --remote=origin --push
-# or: create an empty repo on github.com, then:
-# git remote add origin https://github.com/<YOU>/hackyeah-2026.git
-# git branch -M main
-# git push -u origin main
+git branch -M main
+git remote add origin https://github.com/worthy11/hackyeah2026.git  # skip if already set
+git push -u origin main
 ```
 
 ---
 
 ### Step 2 — Login to Azure and create a resource group
 
-```bash
-az login
-az account set --subscription "<SUBSCRIPTION_ID>"
+```powershell
+az login --use-device-code
+# optional: az account set --subscription "YOUR_SUBSCRIPTION_ID"
 
-az group create --name rg-hackyeah --location westeurope
+az group create --name $RG --location $LOCATION
+```
+
+Register providers (first time only; wait until each shows `Registered`):
+
+```powershell
+az provider register --namespace Microsoft.ContainerRegistry
+az provider register --namespace Microsoft.App
+az provider register --namespace Microsoft.DBforPostgreSQL
+az provider register --namespace Microsoft.OperationalInsights
+
+az provider show --namespace Microsoft.ContainerRegistry --query registrationState -o tsv
 ```
 
 ---
 
 ### Step 3 — Create ACR
 
-ACR name must be globally unique (letters/numbers only):
+```powershell
+az acr create `
+  --resource-group $RG `
+  --name $ACR_NAME `
+  --sku Basic `
+  --admin-enabled true `
+  --location $LOCATION
 
-```bash
-az acr create \
-  --resource-group rg-hackyeah \
-  --name <uniqueAcrName> \
-  --sku Basic \
-  --admin-enabled true
-
-az acr login --name <uniqueAcrName>
-ACR_LOGIN=$(az acr show --name <uniqueAcrName> --query loginServer -o tsv)
-echo "$ACR_LOGIN"
+az acr login --name $ACR_NAME
+$ACR_LOGIN = az acr show --name $ACR_NAME --query loginServer -o tsv
+Write-Host $ACR_LOGIN
 ```
 
 ---
 
 ### Step 4 — Create PostgreSQL
 
-```bash
-az postgres flexible-server create \
-  --resource-group rg-hackyeah \
-  --name <unique-pg-name> \
-  --location westeurope \
-  --admin-user pgadmin \
-  --admin-password "<StrongPassword123!>" \
-  --sku-name Standard_B1ms \
-  --tier Burstable \
-  --version 16 \
-  --storage-size 32 \
+```powershell
+az postgres flexible-server create `
+  --resource-group $RG `
+  --name $PG_NAME `
+  --location $LOCATION `
+  --admin-user pgadmin `
+  --admin-password $PG_PASSWORD `
+  --sku-name Standard_B1ms `
+  --tier Burstable `
+  --version 16 `
+  --storage-size 32 `
   --public-access 0.0.0.0
 
-az postgres flexible-server db create \
-  --resource-group rg-hackyeah \
-  --server-name <unique-pg-name> \
+az postgres flexible-server db create `
+  --resource-group $RG `
+  --server-name $PG_NAME `
   --database-name app
 
-az postgres flexible-server firewall-rule create \
-  --resource-group rg-hackyeah \
-  --name <unique-pg-name> \
-  --rule-name AllowAzureServices \
-  --start-ip-address 0.0.0.0 \
+az postgres flexible-server firewall-rule create `
+  --resource-group $RG `
+  --name $PG_NAME `
+  --rule-name AllowAzureServices `
+  --start-ip-address 0.0.0.0 `
   --end-ip-address 0.0.0.0
 ```
 
-Build the DB URL (URL-encode special characters in the password):
+Build the DB URL (URL-encode special characters in the password if needed):
 
-```text
-postgresql+psycopg2://pgadmin:<PASSWORD>@<unique-pg-name>.postgres.database.azure.com:5432/app?sslmode=require
+```powershell
+$DATABASE_URL = "postgresql+psycopg2://pgadmin:${PG_PASSWORD}@${PG_NAME}.postgres.database.azure.com:5432/app?sslmode=require"
+Write-Host $DATABASE_URL
 ```
-
-Save this as `DATABASE_URL` for the next steps.
 
 ---
 
 ### Step 5 — Create Container Apps environment
 
-```bash
-az containerapp env create \
-  --name cae-hackyeah \
-  --resource-group rg-hackyeah \
-  --location westeurope
+```powershell
+az containerapp env create `
+  --name $CAE `
+  --resource-group $RG `
+  --location $LOCATION
 
-ACR_NAME=<uniqueAcrName>
-ACR_USER=$(az acr credential show -n $ACR_NAME --query username -o tsv)
-ACR_PASS=$(az acr credential show -n $ACR_NAME --query passwords[0].value -o tsv)
-ACR_LOGIN=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
+$ACR_USER = az acr credential show -n $ACR_NAME --query username -o tsv
+$ACR_PASS = az acr credential show -n $ACR_NAME --query "passwords[0].value" -o tsv
+$ACR_LOGIN = az acr show -n $ACR_NAME --query loginServer -o tsv
 ```
 
 ---
@@ -221,101 +238,132 @@ ACR_LOGIN=$(az acr show -n $ACR_NAME --query loginServer -o tsv)
 
 From the **repo root**:
 
-```bash
+```powershell
 # API
-docker build -f backend/docker/Dockerfile -t $ACR_LOGIN/hackyeah-api:latest .
-docker push $ACR_LOGIN/hackyeah-api:latest
+docker build -f backend/docker/Dockerfile -t "$ACR_LOGIN/hackyeah-api:latest" .
+docker push "$ACR_LOGIN/hackyeah-api:latest"
 
 # Temporary web image (API URL fixed after API exists)
-docker build -f backend/docker/Dockerfile.frontend \
-  --build-arg VITE_API_URL="" \
-  -t $ACR_LOGIN/hackyeah-web:latest .
-docker push $ACR_LOGIN/hackyeah-web:latest
+docker build -f backend/docker/Dockerfile.frontend `
+  --build-arg VITE_API_URL="" `
+  -t "$ACR_LOGIN/hackyeah-web:latest" .
+docker push "$ACR_LOGIN/hackyeah-web:latest"
 ```
 
 Create API:
 
-```bash
-az containerapp create \
-  --name ca-hackyeah-api \
-  --resource-group rg-hackyeah \
-  --environment cae-hackyeah \
-  --image $ACR_LOGIN/hackyeah-api:latest \
-  --registry-server $ACR_LOGIN \
-  --registry-username $ACR_USER \
-  --registry-password "$ACR_PASS" \
-  --target-port 8000 \
-  --ingress external \
-  --cpu 0.5 --memory 1.0Gi \
-  --secrets "database-url=$DATABASE_URL" \
-  --env-vars "DATABASE_URL=secretref:database-url" 'CORS_ORIGINS=["*"]'
+```powershell
+az containerapp create `
+  --name $API_APP `
+  --resource-group $RG `
+  --environment $CAE `
+  --image "$ACR_LOGIN/hackyeah-api:latest" `
+  --registry-server $ACR_LOGIN `
+  --registry-username $ACR_USER `
+  --registry-password $ACR_PASS `
+  --target-port 8000 `
+  --ingress external `
+  --cpu 0.5 --memory 1.0Gi `
+  --secrets "database-url=$DATABASE_URL" `
+  --env-vars "DATABASE_URL=secretref:database-url" "CORS_ORIGINS=*"
 ```
 
-```bash
-API_FQDN=$(az containerapp show -n ca-hackyeah-api -g rg-hackyeah \
-  --query properties.configuration.ingress.fqdn -o tsv)
-echo "https://$API_FQDN"
+```powershell
+$API_FQDN = az containerapp show -n $API_APP -g $RG --query properties.configuration.ingress.fqdn -o tsv
+Write-Host "https://$API_FQDN"
 ```
 
 Rebuild web with the real API URL, create web app:
 
-```bash
-docker build -f backend/docker/Dockerfile.frontend \
-  --build-arg VITE_API_URL=https://$API_FQDN \
-  -t $ACR_LOGIN/hackyeah-web:latest .
-docker push $ACR_LOGIN/hackyeah-web:latest
+```powershell
+docker build -f backend/docker/Dockerfile.frontend `
+  --build-arg "VITE_API_URL=https://$API_FQDN" `
+  -t "$ACR_LOGIN/hackyeah-web:latest" .
+docker push "$ACR_LOGIN/hackyeah-web:latest"
 
-az containerapp create \
-  --name ca-hackyeah-web \
-  --resource-group rg-hackyeah \
-  --environment cae-hackyeah \
-  --image $ACR_LOGIN/hackyeah-web:latest \
-  --registry-server $ACR_LOGIN \
-  --registry-username $ACR_USER \
-  --registry-password "$ACR_PASS" \
-  --target-port 80 \
-  --ingress external \
+az containerapp create `
+  --name $WEB_APP `
+  --resource-group $RG `
+  --environment $CAE `
+  --image "$ACR_LOGIN/hackyeah-web:latest" `
+  --registry-server $ACR_LOGIN `
+  --registry-username $ACR_USER `
+  --registry-password $ACR_PASS `
+  --target-port 80 `
+  --ingress external `
   --cpu 0.25 --memory 0.5Gi
 
-WEB_FQDN=$(az containerapp show -n ca-hackyeah-web -g rg-hackyeah \
-  --query properties.configuration.ingress.fqdn -o tsv)
+$WEB_FQDN = az containerapp show -n $WEB_APP -g $RG --query properties.configuration.ingress.fqdn -o tsv
 
-az containerapp update -n ca-hackyeah-api -g rg-hackyeah \
-  --set-env-vars "CORS_ORIGINS=[\"https://${WEB_FQDN}\"]"
+az containerapp update -n $API_APP -g $RG `
+  --set-env-vars "CORS_ORIGINS=https://$WEB_FQDN"
 
-echo "Web: https://$WEB_FQDN"
-echo "API: https://$API_FQDN"
-echo "Docs: https://$API_FQDN/docs"
+Write-Host "Web: https://$WEB_FQDN"
+Write-Host "API: https://$API_FQDN"
+Write-Host "Docs: https://$API_FQDN/docs"
 ```
 
 Smoke-check: open the web URL and `https://$API_FQDN/health`.
 
 ---
 
-### Step 7 — Give GitHub permission to deploy
+### Step 7 — Redeploy from your machine (no Entra / no GitHub required)
+
+You already have Azure access via `az login`. Use the local script instead of a service principal:
+
+```powershell
+# once per terminal session if needed
+az login --use-device-code
+
+# from repo root
+.\scripts\deploy.ps1
+```
+
+What it does: build API + web images → push to ACR → update both Container Apps → refresh CORS.
+
+Optional:
+
+```powershell
+.\scripts\deploy.ps1 -Tag "v2"       # custom tag (still also pushes :latest)
+.\scripts\deploy.ps1 -SkipBuild      # reuse already-built local images
+```
+
+By default the script uses a timestamp tag (e.g. `20261003-152700`) for the Container App update, and also pushes `:latest`. Azure often ignores a plain `:latest` update when the name didn’t change, so the unique tag is what actually forces a redeploy.
+
+---
+
+### Optional — GitHub Actions auto-deploy
+
+Only needed if you want push-to-`main` deploys. That path needs an Entra app registration / service principal (often blocked on school tenants). Prefer `.\scripts\deploy.ps1` unless you have directory permissions.
+
+If you *do* have SP rights, continue with Steps 8–9 below. Otherwise skip them.
+
+---
+
+### Step 8 — Give GitHub permission to deploy (optional)
 
 Create a service principal scoped to the resource group (JSON used as a GitHub secret):
 
-```bash
-SUB_ID=$(az account show --query id -o tsv)
-az ad sp create-for-rbac \
-  --name "gh-hackyeah-deploy" \
-  --role contributor \
-  --scopes "/subscriptions/$SUB_ID/resourceGroups/rg-hackyeah" \
+```powershell
+$SUB_ID = az account show --query id -o tsv
+az ad sp create-for-rbac `
+  --name "gh-hackyeah-deploy" `
+  --role contributor `
+  --scopes "/subscriptions/$SUB_ID/resourceGroups/$RG" `
   --sdk-auth
 ```
 
 Copy the entire JSON output. Also grant ACR push:
 
-```bash
-ACR_ID=$(az acr show -n <uniqueAcrName> -g rg-hackyeah --query id -o tsv)
-SP_APP_ID=$(az ad sp list --display-name "gh-hackyeah-deploy" --query [0].appId -o tsv)
-az role assignment create --assignee "$SP_APP_ID" --role AcrPush --scope "$ACR_ID"
+```powershell
+$ACR_ID = az acr show -n $ACR_NAME -g $RG --query id -o tsv
+$SP_APP_ID = az ad sp list --display-name "gh-hackyeah-deploy" --query "[0].appId" -o tsv
+az role assignment create --assignee $SP_APP_ID --role AcrPush --scope $ACR_ID
 ```
 
 ---
 
-### Step 8 — Configure the GitHub repo
+### Step 9 — Configure the GitHub repo (optional)
 
 In the repo: **Settings → Secrets and variables → Actions**
 
@@ -329,47 +377,19 @@ In the repo: **Settings → Secrets and variables → Actions**
 
 | Name | Example value |
 | --- | --- |
-| `AZURE_RESOURCE_GROUP` | `rg-hackyeah` |
-| `ACR_NAME` | `<uniqueAcrName>` |
+| `AZURE_RESOURCE_GROUP` | `hackyeah2026` |
+| `ACR_NAME` | `hackyeah2026acr` |
 | `API_APP_NAME` | `ca-hackyeah-api` |
 | `WEB_APP_NAME` | `ca-hackyeah-web` |
 
-With `gh` CLI:
-
-```bash
-gh secret set AZURE_CREDENTIALS < azure-creds.json   # paste/save the JSON to a file first
-gh variable set AZURE_RESOURCE_GROUP --body "rg-hackyeah"
-gh variable set ACR_NAME --body "<uniqueAcrName>"
-gh variable set API_APP_NAME --body "ca-hackyeah-api"
-gh variable set WEB_APP_NAME --body "ca-hackyeah-web"
-```
-
----
-
-### Step 9 — Automatic redeploy
-
-Ensure `.github/workflows/deploy.yml` is on `main`, then:
-
-```bash
-git add .
-git commit -m "Add Azure deploy workflow"
-git push origin main
-```
-
-GitHub → **Actions** → workflow **Deploy to Azure** should run. On success it:
-
-1. Logs into Azure / ACR  
-2. Builds & pushes `hackyeah-api` and `hackyeah-web`  
-3. Updates both Container Apps  
-
-Later: any commit to `main` triggers the same redeploy. You can also run it manually via **Actions → Deploy to Azure → Run workflow**.
+Then push to `main` (or **Actions → Deploy to Azure → Run workflow**).
 
 ---
 
 ### Cost tips
 
 - Basic ACR, Burstable `B1ms` Postgres, low Container Apps CPU/memory.  
-- Tear down when done: `az group delete -n rg-hackyeah --yes --no-wait`.
+- Tear down when done: `az group delete -n $RG --yes --no-wait`.
 
 ---
 
