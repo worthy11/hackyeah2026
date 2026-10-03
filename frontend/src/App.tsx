@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import AvatarStage from './avatar/AvatarStage'
 import './App.css'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? ''
@@ -30,12 +31,11 @@ function App() {
 
   return (
     <main className="app">
-      <h1>HackYeah</h1>
-      <p className={`status status--${status}`}>{message}</p>
-      <p className="hint">
-        Local API: <code>http://localhost:8000</code> · Docs:{' '}
-        <code>/docs</code>
-      </p>
+      <header className="top">
+        <h1>HackYeah</h1>
+        <p className={`status status--${status}`}>{message}</p>
+      </header>
+      <AvatarStage />
     </main>
   )
 }

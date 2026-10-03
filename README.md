@@ -92,11 +92,9 @@ docker compose up --build
 
 ---
 
-## Deploy to Azure (GitHub Actions on `main`)
+## Deploy to Azure
 
-Flow: push to `main` → GitHub Actions builds images → pushes to ACR → updates Container Apps.
-
-One-time Azure setup, then every push to `main` redeploys automatically. Workflow file: [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml).
+One-time Azure setup, then redeploy with `.\scripts\deploy.ps1` (uses your `az login` session — no Entra / GitHub Actions needed).
 
 | Piece | Azure service |
 | --- | --- |
@@ -329,60 +327,6 @@ Optional:
 ```
 
 By default the script uses a timestamp tag (e.g. `20261003-152700`) for the Container App update, and also pushes `:latest`. Azure often ignores a plain `:latest` update when the name didn’t change, so the unique tag is what actually forces a redeploy.
-
----
-
-### Optional — GitHub Actions auto-deploy
-
-Only needed if you want push-to-`main` deploys. That path needs an Entra app registration / service principal (often blocked on school tenants). Prefer `.\scripts\deploy.ps1` unless you have directory permissions.
-
-If you *do* have SP rights, continue with Steps 8–9 below. Otherwise skip them.
-
----
-
-### Step 8 — Give GitHub permission to deploy (optional)
-
-Create a service principal scoped to the resource group (JSON used as a GitHub secret):
-
-```powershell
-$SUB_ID = az account show --query id -o tsv
-az ad sp create-for-rbac `
-  --name "gh-hackyeah-deploy" `
-  --role contributor `
-  --scopes "/subscriptions/$SUB_ID/resourceGroups/$RG" `
-  --sdk-auth
-```
-
-Copy the entire JSON output. Also grant ACR push:
-
-```powershell
-$ACR_ID = az acr show -n $ACR_NAME -g $RG --query id -o tsv
-$SP_APP_ID = az ad sp list --display-name "gh-hackyeah-deploy" --query "[0].appId" -o tsv
-az role assignment create --assignee $SP_APP_ID --role AcrPush --scope $ACR_ID
-```
-
----
-
-### Step 9 — Configure the GitHub repo (optional)
-
-In the repo: **Settings → Secrets and variables → Actions**
-
-**Secret**
-
-| Name | Value |
-| --- | --- |
-| `AZURE_CREDENTIALS` | Full JSON from `az ad sp create-for-rbac ... --sdk-auth` |
-
-**Variables** (Settings → Secrets and variables → Actions → Variables)
-
-| Name | Example value |
-| --- | --- |
-| `AZURE_RESOURCE_GROUP` | `hackyeah2026` |
-| `ACR_NAME` | `hackyeah2026acr` |
-| `API_APP_NAME` | `ca-hackyeah-api` |
-| `WEB_APP_NAME` | `ca-hackyeah-web` |
-
-Then push to `main` (or **Actions → Deploy to Azure → Run workflow**).
 
 ---
 
