@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { DashboardHeader } from './components/DashboardHeader'
-import { LessonDashboard } from './components/LessonDashboard'
 import { LearnView } from './components/learn/LearnView'
 import { VocabularyView } from './components/learn/VocabularyView'
 import { MobileNavigation, Sidebar } from './components/Sidebar'
