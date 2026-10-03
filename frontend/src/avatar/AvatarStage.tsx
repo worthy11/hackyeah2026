@@ -6,7 +6,8 @@ import {
 } from '@mediapipe/tasks-vision'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
-import { AvatarRig, type ArmPose, type BodyPose, type Vec3 } from './rig'
+import { ArmFilter, HeadFilter } from './filters'
+import { AvatarRig, type ArmPose, type BodyPose, type HeadPose, type Vec3 } from './rig'
 
 const AVATAR_URL = '/654230026_avatar_sdk.glb'
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
@@ -62,25 +63,64 @@ function armFromPose(world: MpPoint[], image: MpPoint[] | undefined, avatarSide:
   return { shoulder, elbow, wrist, hand: null }
 }
 
+function headFromPose(world: MpPoint[], image: MpPoint[] | undefined): HeadPose | null {
+  if (!visible(image, 0) || !visible(image, 7) || !visible(image, 8)) return null
+  const leftEar = sourceSide('Left') === 'Left' ? 7 : 8
+  const rightEar = sourceSide('Right') === 'Right' ? 8 : 7
+  return {
+    nose: mpToScene(world[0]),
+    leftEar: mpToScene(world[leftEar]),
+    rightEar: mpToScene(world[rightEar]),
+  }
+}
+
+type HandResult = {
+  landmarks?: MpPoint[][]
+  worldLandmarks?: MpPoint[][]
+  handedness?: { categoryName?: string; score?: number }[][]
+}
+
+/** Anatomical side of each detected hand, matched to the nearest pose wrist. Handedness labels flip too often to trust. */
+function assignHands(poseImage: MpPoint[] | undefined, hands: HandResult): Array<Side | null> {
+  const points = hands.landmarks ?? []
+  const leftWrist = poseImage?.[POSE_INDEX.Left.wrist]
+  const rightWrist = poseImage?.[POSE_INDEX.Right.wrist]
+  const label = (index: number): Side | null => {
+    const name = hands.handedness?.[index]?.[0]?.categoryName
+    return name === 'Left' || name === 'Right' ? name : null
+  }
+  if (!leftWrist || !rightWrist) return points.map((_, index) => label(index))
+
+  const distance = (hand: MpPoint[], wrist: MpPoint) => Math.hypot(hand[0].x - wrist.x, hand[0].y - wrist.y)
+  if (points.length === 1) {
+    return [distance(points[0], leftWrist) <= distance(points[0], rightWrist) ? 'Left' : 'Right']
+  }
+  if (points.length >= 2) {
+    const straight = distance(points[0], leftWrist) + distance(points[1], rightWrist)
+    const crossed = distance(points[0], rightWrist) + distance(points[1], leftWrist)
+    const sides: Array<Side | null> = straight <= crossed ? ['Left', 'Right'] : ['Right', 'Left']
+    return points.map((_, index) => sides[index] ?? null)
+  }
+  return []
+}
+
 function toBodyPose(
   pose: { landmarks?: MpPoint[][]; worldLandmarks?: MpPoint[][] },
-  hands: {
-    worldLandmarks?: MpPoint[][]
-    handedness?: { categoryName?: string; score?: number }[][]
-  },
+  hands: HandResult,
+  handSides: Array<Side | null>,
 ): BodyPose {
   const world = pose.worldLandmarks?.[0]
   const image = pose.landmarks?.[0]
   const body: BodyPose = {
     left: world && world.length >= 17 ? armFromPose(world, image, 'Left') : null,
     right: world && world.length >= 17 ? armFromPose(world, image, 'Right') : null,
+    head: world && world.length > 8 ? headFromPose(world, image) : null,
   }
 
   hands.worldLandmarks?.forEach((landmarks, index) => {
-    const label = hands.handedness?.[index]?.[0]
-    if (!label || (label.score ?? 1) < 0.5 || landmarks.length < 21) return
-    const detected = label.categoryName === 'Left' || label.categoryName === 'Right' ? label.categoryName : null
-    if (!detected) return
+    const score = hands.handedness?.[index]?.[0]?.score ?? 1
+    const detected = handSides[index]
+    if (!detected || score < 0.5 || landmarks.length < 21) return
     const avatarSide = sourceSide(detected)
     const arm = avatarSide === 'Left' ? body.left : body.right
     if (!arm) return
@@ -90,32 +130,10 @@ function toBodyPose(
   return body
 }
 
-function mix(a: Vec3, b: Vec3, amount: number): Vec3 {
-  return {
-    x: a.x + (b.x - a.x) * amount,
-    y: a.y + (b.y - a.y) * amount,
-    z: a.z + (b.z - a.z) * amount,
-  }
-}
-
-function smoothArm(
-  previous: ArmPose | null,
-  next: ArmPose | null,
-  armAlpha: number,
-  handAlpha: number,
-): ArmPose | null {
-  if (!next) return null
-  if (!previous) return next
-  const hand =
-    next.hand && previous.hand && previous.hand.length === next.hand.length
-      ? next.hand.map((point, index) => mix(previous.hand![index], point, handAlpha))
-      : next.hand
-  return {
-    shoulder: mix(previous.shoulder, next.shoulder, armAlpha),
-    elbow: mix(previous.elbow, next.elbow, armAlpha),
-    wrist: mix(previous.wrist, next.wrist, armAlpha),
-    hand,
-  }
+function holdHead(next: HeadPose | null, previous: HeadPose | null, missed: number) {
+  if (next) return { head: next, missed: 0 }
+  if (previous && missed < 6) return { head: previous, missed: missed + 1 }
+  return { head: null, missed: missed + 1 }
 }
 
 const POSE_LINKS: Array<[number, number]> = [
@@ -124,6 +142,12 @@ const POSE_LINKS: Array<[number, number]> = [
   [12, 14],
   [14, 16],
   [11, 12],
+]
+
+const FACE_LINKS: Array<[number, number]> = [
+  [7, 8],
+  [0, 7],
+  [0, 8],
 ]
 
 const HAND_LINKS: Array<[number, number]> = [
@@ -139,7 +163,8 @@ function drawOverlay(
   canvas: HTMLCanvasElement,
   video: HTMLVideoElement,
   pose: { landmarks?: MpPoint[][] },
-  hands: { landmarks?: MpPoint[][]; handedness?: { categoryName?: string }[][] },
+  hands: HandResult,
+  handSides: Array<Side | null>,
 ) {
   const ctx = canvas.getContext('2d')
   if (!ctx || video.videoWidth === 0) return
@@ -151,13 +176,14 @@ function drawOverlay(
 
   const body = pose.landmarks?.[0]
   if (body) {
+    drawLinks(ctx, body, FACE_LINKS, '#ddd6fe', canvas.width, canvas.height)
     drawLinks(ctx, body, POSE_LINKS, '#67e8f9', canvas.width, canvas.height)
     labelPoint(ctx, body[15], 'L', '#67e8f9', canvas.width, canvas.height)
     labelPoint(ctx, body[16], 'R', '#67e8f9', canvas.width, canvas.height)
   }
 
   hands.landmarks?.forEach((points, index) => {
-    const name = hands.handedness?.[index]?.[0]?.categoryName
+    const name = handSides[index]
     const color = name === 'Left' ? '#fbbf24' : '#86efac'
     drawLinks(ctx, points, HAND_LINKS, color, canvas.width, canvas.height)
     labelPoint(ctx, points[0], name === 'Left' ? 'left' : 'right', color, canvas.width, canvas.height)
@@ -217,11 +243,38 @@ function labelPoint(
   ctx.fillText(text, mirrorX(point, width) + 8, point.y * height - 8)
 }
 
-function holdHand(next: ArmPose | null, previous: ArmPose | null, missed: number) {
-  if (!next) return { arm: null, missed: 0 }
-  if (next.hand) return { arm: next, missed: 0 }
-  if (previous?.hand && missed < 8) return { arm: { ...next, hand: previous.hand }, missed: missed + 1 }
-  return { arm: next, missed: missed + 1 }
+type HoldState = { arm: number; hand: number; jump: number }
+
+const ARM_HOLD_FRAMES = 6
+const HAND_HOLD_FRAMES = 8
+const JUMP_HOLD_FRAMES = 4
+const JUMP_DISTANCE = 0.3
+
+function distance(a: Vec3, b: Vec3) {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+}
+
+/** Rides out short dropouts and single-frame landmark jumps instead of snapping the arm. */
+function holdArm(next: ArmPose | null, previous: ArmPose | null, state: HoldState): ArmPose | null {
+  if (!next) {
+    state.arm += 1
+    return previous && state.arm <= ARM_HOLD_FRAMES ? previous : null
+  }
+  state.arm = 0
+
+  if (previous && (distance(next.wrist, previous.wrist) > JUMP_DISTANCE || distance(next.elbow, previous.elbow) > JUMP_DISTANCE)) {
+    state.jump += 1
+    if (state.jump <= JUMP_HOLD_FRAMES) return previous
+  }
+  state.jump = 0
+
+  if (next.hand) {
+    state.hand = 0
+    return next
+  }
+  state.hand += 1
+  if (previous?.hand && state.hand <= HAND_HOLD_FRAMES) return { ...next, hand: previous.hand }
+  return next
 }
 
 export default function AvatarStage() {
@@ -284,9 +337,13 @@ export default function AvatarStage() {
     track(() => observer.disconnect())
 
     let rig: AvatarRig | null = null
-    let smoothed: BodyPose = { left: null, right: null }
-    let leftMiss = 0
-    let rightMiss = 0
+    let smoothed: BodyPose = { left: null, right: null, head: null }
+    const leftFilter = new ArmFilter()
+    const rightFilter = new ArmFilter()
+    const headFilter = new HeadFilter()
+    const leftHold: HoldState = { arm: 0, hand: 0, jump: 0 }
+    const rightHold: HoldState = { arm: 0, hand: 0, jump: 0 }
+    let headMiss = 0
     let lastTimestamp = -1
     let lastFrame = performance.now()
 
@@ -301,19 +358,19 @@ export default function AvatarStage() {
         try {
           const pose = trackers.pose.detectForVideo(video, timestamp)
           const hands = trackers.hands.detectForVideo(video, timestamp)
-          drawOverlay(overlay, video, pose, hands)
-          const body = toBodyPose(pose, hands)
-          const left = holdHand(body.left, smoothed.left, leftMiss)
-          const right = holdHand(body.right, smoothed.right, rightMiss)
-          leftMiss = left.missed
-          rightMiss = right.missed
-          const armAlpha = 1 - Math.exp(-dt / 0.12)
-          const handAlpha = 1 - Math.exp(-dt / 0.2)
+          const handSides = assignHands(pose.landmarks?.[0], hands)
+          drawOverlay(overlay, video, pose, hands, handSides)
+          const body = toBodyPose(pose, hands, handSides)
+          const left = holdArm(body.left, smoothed.left, leftHold)
+          const right = holdArm(body.right, smoothed.right, rightHold)
+          const heldHead = holdHead(body.head, smoothed.head, headMiss)
+          headMiss = heldHead.missed
           smoothed = {
-            left: smoothArm(smoothed.left, left.arm, armAlpha, handAlpha),
-            right: smoothArm(smoothed.right, right.arm, armAlpha, handAlpha),
+            left: leftFilter.filter(left, dt),
+            right: rightFilter.filter(right, dt),
+            head: headFilter.filter(heldHead.head, dt),
           }
-          if (smoothed.left || smoothed.right) rig.apply(smoothed, dt)
+          if (smoothed.left || smoothed.right || smoothed.head) rig.apply(smoothed, dt)
         } catch {
           // A skipped video frame can repeat a timestamp. The next frame recovers.
         }
@@ -438,7 +495,7 @@ export default function AvatarStage() {
       </div>
       {tracking && (
         <p className="hint">
-          Cyan lines are the arms. Yellow is the left hand, green is the right. Video stays on this device.
+          Violet marks the face, cyan the arms. Yellow is the left hand, green is the right. Video stays on this device.
         </p>
       )}
     </section>

@@ -10,9 +10,16 @@ export type ArmPose = {
   hand: Vec3[] | null
 }
 
+export type HeadPose = {
+  nose: Vec3
+  leftEar: Vec3
+  rightEar: Vec3
+}
+
 export type BodyPose = {
   left: ArmPose | null
   right: ArmPose | null
+  head: HeadPose | null
 }
 
 type Side = 'Left' | 'Right'
@@ -56,12 +63,21 @@ const _b = new THREE.Vector3()
 const _c = new THREE.Vector3()
 
 const _cross = new THREE.Vector3()
+const _euler = new THREE.Euler(0, 0, 0, 'YXZ')
 
-const ARM_FOLLOW = 0.28
+const BONE_TAU = 0.04
+const BONE_SOFT_ZONE = 0.09
+const BONE_REST_SPEED = 0.06
 const CURL_LIMIT = 1.75
 const SPLAY_LIMIT = 0.45
-const ANGLE_DEADZONE = 0.05
-const ANGLE_TAU = 0.1
+const ANGLE_DEADZONE = 0.03
+const ANGLE_TAU = 0.055
+const SHOULDER_LIMIT = 0.5
+const HINGE_MIN_BEND = 0.35
+const HEAD_DEADZONE = 0.025
+const HEAD_TAU_SLOW = 0.22
+const HEAD_TAU_FAST = 0.07
+const NECK_NAMES = ['Neck', 'Neck1', 'Neck2'] as const
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -88,6 +104,14 @@ export class AvatarRig {
   private readonly bones = new Map<string, THREE.Bone>()
   private readonly hingeSign = new Map<Side, THREE.Vector3>()
   private readonly acrossSign = new Map<Side, THREE.Vector3>()
+  private clock = 0
+  private glanceYaw = 0
+  private glancePitch = 0
+  private glanceHold = 0
+  private glanceNext = 1.6
+  private headYaw = 0
+  private headPitch = 0
+  private headRoll = 0
 
   constructor(root: THREE.Object3D) {
     root.updateMatrixWorld(true)
@@ -98,6 +122,9 @@ export class AvatarRig {
       const canonical = bone.name.replace(/_\d+$/, '')
       if (canonical !== bone.name && !this.bones.has(canonical)) this.bones.set(canonical, bone)
     })
+    this.addChildAxis('LeftShoulder', 'LeftArm')
+    this.addChildAxis('RightShoulder', 'RightArm')
+    for (const name of ['Neck', 'Neck1', 'Neck2', 'Head', 'LeftEye', 'RightEye']) this.addRest(name)
     for (const side of ['Left', 'Right'] as const) {
       this.addChildAxis(`${side}Arm`, `${side}ForeArm`)
       this.addChildAxis(`${side}ForeArm`, `${side}Hand`)
@@ -108,8 +135,132 @@ export class AvatarRig {
   }
 
   apply(pose: BodyPose, dt = 1 / 60) {
+    this.applyShoulders(pose, dt)
     this.applySide('Left', pose.left, dt)
     this.applySide('Right', pose.right, dt)
+    this.applyHead(pose.head, dt)
+  }
+
+  private applyShoulders(pose: BodyPose, dt: number) {
+    const left = pose.left
+    const right = pose.right
+    if (left && right) {
+      this.aimLimited('LeftShoulder', this.shoulderAim(left, right, _x), SHOULDER_LIMIT, dt)
+      this.aimLimited('RightShoulder', this.shoulderAim(right, left, _y), SHOULDER_LIMIT, dt)
+      return
+    }
+    if (left && !right) this.aimLimited('LeftShoulder', _x.set(left.shoulder.x, 0, left.shoulder.z), SHOULDER_LIMIT, dt)
+    else if (!left) this.release(['LeftShoulder'], dt)
+    if (right && !left) this.aimLimited('RightShoulder', _x.set(right.shoulder.x, 0, right.shoulder.z), SHOULDER_LIMIT, dt)
+    else if (!right) this.release(['RightShoulder'], dt)
+  }
+
+  private shoulderAim(arm: ArmPose, other: ArmPose, out: THREE.Vector3) {
+    const raise = Math.max(0, arm.shoulder.y - other.shoulder.y)
+    const lift = Math.max(0, arm.elbow.y - arm.shoulder.y) * 0.55
+    return out.set(
+      arm.shoulder.x - other.shoulder.x * 0.08,
+      raise + lift,
+      arm.shoulder.z - other.shoulder.z * 0.12,
+    )
+  }
+
+  private applyHead(head: HeadPose | null, dt: number) {
+    this.clock += dt
+    if (!head) {
+      this.release([...NECK_NAMES, 'Head', 'LeftEye', 'RightEye'], dt)
+      return
+    }
+
+    const leftEar = vec(head.leftEar, _a)
+    const rightEar = vec(head.rightEar, _b)
+    const nose = vec(head.nose, _c)
+    _forward.copy(nose).sub(_x.copy(leftEar).add(rightEar).multiplyScalar(0.5))
+    if (_forward.lengthSq() < 1e-6) return
+    _forward.normalize()
+
+    this.headYaw = this.steadyAngle(this.headYaw, clamp(Math.atan2(_forward.x, _forward.z), -0.8, 0.8), dt)
+    this.headPitch = this.steadyAngle(this.headPitch, clamp(-Math.asin(clamp(_forward.y, -1, 1)), -0.45, 0.45), dt)
+    this.headRoll = this.steadyAngle(
+      this.headRoll,
+      clamp(Math.atan2(leftEar.y - rightEar.y, leftEar.x - rightEar.x), -0.4, 0.4),
+      dt,
+    )
+    const yaw = this.headYaw
+    const pitch = this.headPitch
+    const roll = this.headRoll
+    const follow = 1 - Math.exp(-dt / BONE_TAU)
+
+    for (const name of NECK_NAMES) {
+      const entry = this.entries.get(name)
+      if (!entry) continue
+      _delta.setFromEuler(_euler.set(pitch * 0.16, yaw * 0.16, roll * 0.08, 'YXZ'))
+      _solved.copy(entry.restLocal).multiply(_delta)
+      entry.bone.quaternion.slerp(_solved, follow)
+      entry.bone.updateMatrixWorld()
+    }
+
+    const headEntry = this.entries.get('Head')
+    if (headEntry) {
+      _delta.setFromEuler(_euler.set(pitch, yaw, roll, 'YXZ'))
+      _desiredWorld.copy(headEntry.restWorld).multiply(_delta)
+      headEntry.bone.parent?.getWorldQuaternion(_parentInv).invert()
+      _solved.copy(_desiredWorld).premultiply(_parentInv)
+      headEntry.bone.quaternion.slerp(_solved, follow)
+      headEntry.bone.updateMatrixWorld()
+    }
+
+    this.applyEyes(yaw, pitch, dt)
+  }
+
+  /** Ignores sub-degree landmark noise and eases harder on small changes than on real turns. */
+  private steadyAngle(current: number, target: number, dt: number) {
+    const diff = target - current
+    if (Math.abs(diff) < HEAD_DEADZONE) return current
+    const tau = HEAD_TAU_SLOW + (HEAD_TAU_FAST - HEAD_TAU_SLOW) * clamp(Math.abs(diff) / 0.35, 0, 1)
+    return current + diff * (1 - Math.exp(-dt / tau))
+  }
+
+  private applyEyes(yaw: number, pitch: number, dt: number) {
+    if (this.clock >= this.glanceNext) {
+      const away = Math.random() < 0.35
+      this.glanceYaw = away ? (Math.random() - 0.5) * 0.5 : 0
+      this.glancePitch = away ? (Math.random() - 0.5) * 0.18 : 0
+      this.glanceHold = this.clock + 0.5 + Math.random() * 0.9
+      this.glanceNext = this.glanceHold + 0.8 + Math.random() * 2.2
+    } else if (this.clock > this.glanceHold) {
+      this.glanceYaw = 0
+      this.glancePitch = 0
+    }
+    const eyeYaw = clamp(yaw * -0.5 + this.glanceYaw, -0.35, 0.35)
+    const eyePitch = clamp(pitch * -0.35 + this.glancePitch, -0.2, 0.2)
+    _delta.setFromEuler(_euler.set(eyePitch, eyeYaw, 0, 'YXZ'))
+    const snap = 1 - Math.exp(-dt / 0.035)
+    for (const name of ['LeftEye', 'RightEye']) {
+      const entry = this.entries.get(name)
+      if (!entry) continue
+      _solved.copy(entry.restLocal).multiply(_delta)
+      entry.bone.quaternion.slerp(_solved, snap)
+    }
+  }
+
+  private aimLimited(name: string, forwardWorld: THREE.Vector3, maxAngle: number, dt: number) {
+    const entry = this.entries.get(name)
+    if (!entry || forwardWorld.lengthSq() < 1e-8) {
+      if (entry) entry.bone.quaternion.slerp(entry.restLocal, 0.2)
+      return
+    }
+    _qLocal.copy(this.solveSwing(entry, forwardWorld))
+    _delta.copy(entry.restLocal).invert().multiply(_qLocal)
+    if (_delta.w < 0) _delta.set(-_delta.x, -_delta.y, -_delta.z, -_delta.w)
+    const angle = 2 * Math.acos(clamp(_delta.w, -1, 1))
+    if (angle > maxAngle && angle > 1e-5) {
+      _qWorld.identity().slerp(_delta, maxAngle / angle)
+      _delta.copy(_qWorld)
+    }
+    _solved.copy(entry.restLocal).multiply(_delta)
+    this.follow(entry.bone, _solved, dt)
+    entry.bone.updateMatrixWorld()
   }
 
   private applySide(side: Side, arm: ArmPose | null, dt: number) {
@@ -124,11 +275,10 @@ export class AvatarRig {
     const wrist = vec(arm.wrist, _c)
     const upper = elbow.clone().sub(shoulder)
     const fore = wrist.clone().sub(elbow)
-    const hinge = new THREE.Vector3().crossVectors(upper, fore)
-    const hingeOk = hinge.lengthSq() > 0.0015 && this.stabilizeHinge(side, hinge)
+    const hinge = this.elbowHinge(side, upper, fore)
 
-    this.aim(`${side}Arm`, upper, hingeOk ? hinge : null)
-    this.aim(`${side}ForeArm`, fore, hingeOk ? hinge : null)
+    this.aim(`${side}Arm`, upper, hinge, dt)
+    this.aim(`${side}ForeArm`, fore, hinge, dt)
 
     if (arm.hand && arm.hand.length >= 21) {
       this.applyHand(side, arm.hand, dt)
@@ -148,7 +298,7 @@ export class AvatarRig {
     const forward = middle.sub(wrist)
     const across = pinky.clone().sub(index)
 
-    this.aim(`${side}Hand`, forward, this.handAcross(side, forward, across))
+    this.aim(`${side}Hand`, forward, this.handAcross(side, forward, across), dt)
 
     for (const finger of FINGERS) {
       for (let segment = 0; segment < 3; segment++) {
@@ -159,7 +309,7 @@ export class AvatarRig {
     }
   }
 
-  private aim(name: string, forwardWorld: THREE.Vector3, sideWorld: THREE.Vector3 | null) {
+  private aim(name: string, forwardWorld: THREE.Vector3, sideWorld: THREE.Vector3 | null, dt: number) {
     const entry = this.entries.get(name)
     if (!entry || forwardWorld.lengthSq() < 1e-8) {
       if (entry) entry.bone.quaternion.slerp(entry.restLocal, 0.2)
@@ -171,8 +321,15 @@ export class AvatarRig {
         ? this.solveBasis(entry, forwardWorld, sideWorld)
         : this.solveSwing(entry, forwardWorld)
 
-    entry.bone.quaternion.slerp(solved, ARM_FOLLOW)
+    this.follow(entry.bone, solved, dt)
     entry.bone.updateMatrixWorld()
+  }
+
+  /** Small rotation differences are mostly noise, so they ease in slowly; real moves follow at full speed. */
+  private follow(bone: THREE.Bone, target: THREE.Quaternion, dt: number) {
+    const closeness = clamp(bone.quaternion.angleTo(target) / BONE_SOFT_ZONE, 0, 1)
+    const speed = Math.max(BONE_REST_SPEED, closeness * closeness)
+    bone.quaternion.slerp(target, (1 - Math.exp(-dt / BONE_TAU)) * speed)
   }
 
   private curlFinger(name: string, worldDir: THREE.Vector3, dt: number) {
@@ -244,18 +401,23 @@ export class AvatarRig {
     }
   }
 
-  private stabilizeHinge(side: Side, hinge: THREE.Vector3) {
-    return this.stabilizeVector(this.hingeSign, side, hinge)
-  }
-
-  private stabilizeVector(store: Map<Side, THREE.Vector3>, side: Side, vector: THREE.Vector3) {
-    if (vector.lengthSq() < 1e-4) return false
-    vector.normalize()
-    const prev = store.get(side)
-    if (prev && prev.dot(vector) < 0) vector.negate()
-    if (prev) prev.copy(vector)
-    else store.set(side, vector.clone())
-    return true
+  /**
+   * Elbow axis from the arm bend. A nearly straight arm has no reliable axis, so the last
+   * clear one is reused, and the sign never flips between frames.
+   */
+  private elbowHinge(side: Side, upper: THREE.Vector3, fore: THREE.Vector3) {
+    const prev = this.hingeSign.get(side)
+    const hinge = new THREE.Vector3().crossVectors(upper, fore)
+    const bend = hinge.length() / Math.max(1e-6, upper.length() * fore.length())
+    if (bend < HINGE_MIN_BEND) return prev?.clone() ?? null
+    hinge.normalize()
+    if (prev && prev.dot(hinge) < 0) hinge.negate()
+    if (prev) {
+      prev.lerp(hinge, clamp((bend - HINGE_MIN_BEND) * 2, 0.15, 1)).normalize()
+      return prev.clone()
+    }
+    this.hingeSign.set(side, hinge.clone())
+    return hinge
   }
 
   private armBoneNames(side: Side) {
@@ -266,6 +428,12 @@ export class AvatarRig {
       }
     }
     return names
+  }
+
+  private addRest(name: string) {
+    const bone = this.find(name)
+    if (!bone) return
+    this.remember(name, bone, _up)
   }
 
   private addChildAxis(name: string, childName: string) {
