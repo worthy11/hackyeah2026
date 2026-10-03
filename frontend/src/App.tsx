@@ -1,42 +1,29 @@
-import { useEffect, useState } from 'react'
-import AvatarStage from './avatar/AvatarStage'
+import { useState } from 'react'
+import { DashboardHeader } from './components/DashboardHeader'
+import { LessonDashboard } from './components/LessonDashboard'
+import { MobileNavigation, Sidebar } from './components/Sidebar'
 import './App.css'
 
-const API_BASE = import.meta.env.VITE_API_URL ?? ''
-
 function App() {
-  const [status, setStatus] = useState<'loading' | 'ok' | 'error'>('loading')
-  const [message, setMessage] = useState('Checking API…')
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    async function checkApi() {
-      try {
-        const res = await fetch(`${API_BASE}/api/`, { signal: controller.signal })
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        const data = (await res.json()) as { message?: string }
-        setMessage(data.message ?? 'API reachable')
-        setStatus('ok')
-      } catch (err) {
-        if (controller.signal.aborted) return
-        setMessage(err instanceof Error ? err.message : 'API unreachable')
-        setStatus('error')
-      }
-    }
-
-    void checkApi()
-    return () => controller.abort()
-  }, [])
+  const [activeItem, setActiveItem] = useState('Moja nauka')
 
   return (
-    <main className="app">
-      <header className="top">
-        <h1>HackYeah</h1>
-        <p className={`status status--${status}`}>{message}</p>
-      </header>
-      <AvatarStage />
-    </main>
+    <div className="app-shell">
+      <Sidebar activeItem={activeItem} onNavigate={setActiveItem} />
+      <div className="workspace" id="nauka">
+        <DashboardHeader />
+        {activeItem === 'Moja nauka' ? (
+          <LessonDashboard onNavigate={setActiveItem} />
+        ) : (
+          <main className="placeholder-view">
+            <span className="eyebrow eyebrow--green">wMig</span>
+            <h2>{activeItem}</h2>
+            <p>Widok w przygotowaniu.</p>
+          </main>
+        )}
+        <MobileNavigation activeItem={activeItem} onNavigate={setActiveItem} />
+      </div>
+    </div>
   )
 }
 
