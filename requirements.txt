@@ -1,3 +1,4 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.36
@@ -7,3 +8,11 @@ pydantic-settings==2.7.0
 python-dotenv==1.0.1
 alembic==1.14.0
 httpx==0.28.1
+python-multipart==0.0.20
+
+# Sign language processing
+torch==2.14.1
+numpy<2
+mediapipe==0.10.21
+pose-format==0.15.0
+safetensors==0.8.0

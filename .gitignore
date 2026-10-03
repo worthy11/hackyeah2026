@@ -18,6 +18,15 @@ build/
 .coverage
 htmlcov/
 
+# Model weights, datasets, research notebooks
+backend/sign_language_processing/data/
+sign_data_collection/samples/
+sign_data_collection/continuous/
+sign_data_collection/models/
+*.pth
+*.safetensors
+*.ipynb
+
 # Environment
 .env
 .env.*

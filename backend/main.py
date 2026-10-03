@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import router as api_router
+from app.api.sign_language import router as sign_language_router
 from app.core.config import settings
 
 app = FastAPI(title=settings.APP_NAME, version="0.1.0")
@@ -15,6 +16,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix="/api")
+app.include_router(sign_language_router, prefix="/api")
 
 
 @app.get("/health")
