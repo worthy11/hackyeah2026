@@ -35,6 +35,14 @@ export function GesturePractice({ gesture, onBack }: Props) {
     }
   }
 
+  function stopCamera() {
+    streamRef.current?.getTracks().forEach((t) => t.stop())
+    streamRef.current = null
+    const video = videoRef.current
+    if (video) { video.srcObject = null }
+    setCameraActive(false)
+  }
+
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -65,7 +73,19 @@ export function GesturePractice({ gesture, onBack }: Props) {
 
         {/* Camera pane */}
         <div className="practice-pane practice-pane--cam">
-          <span className="practice-pane-label">Twoja kamera</span>
+          <div className="practice-pane-label-row">
+            <span className="practice-pane-label">Twoja kamera</span>
+            {cameraActive && (
+              <button
+                className="cam-stop-button"
+                type="button"
+                onClick={stopCamera}
+                title="Wyłącz kamerę"
+              >
+                ✕ Wyłącz
+              </button>
+            )}
+          </div>
           <div className="practice-cam-wrap">
             <video
               ref={videoRef}

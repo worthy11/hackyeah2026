@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 
-const AVATAR_URL = '/654230026_avatar_sdk.glb'
+const AVATAR_URL = '/avatar_2_blendshapes.glb'
 
 export function StaticAvatar() {
   const containerRef = useRef<HTMLDivElement>(null)

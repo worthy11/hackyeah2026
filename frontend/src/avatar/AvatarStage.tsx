@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  FaceLandmarker,
   FilesetResolver,
   HandLandmarker,
   PoseLandmarker,
@@ -9,12 +10,14 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { ArmFilter, HeadFilter } from './filters'
 import { AvatarRig, type ArmPose, type BodyPose, type HeadPose, type Vec3 } from './rig'
 
-const AVATAR_URL = '/654230026_avatar_sdk.glb'
+const AVATAR_URL = '/avatar_2_blendshapes.glb'
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
 const POSE_MODEL =
   'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
 const HAND_MODEL =
   'https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task'
+const FACE_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task'
 
 /** Mirror the pose so the avatar matches the flipped preview. */
 const MIRROR = true
@@ -30,6 +33,42 @@ type MpPoint = { x: number; y: number; z: number; visibility?: number }
 type Trackers = {
   pose: PoseLandmarker
   hands: HandLandmarker
+  face: FaceLandmarker
+}
+
+// ── Blendshape / morph target helpers ────────────────────────────────────────
+
+type MorphEntry = { mesh: THREE.SkinnedMesh; index: number }
+type MorphMap = Map<string, MorphEntry[]>
+type FaceBlendshapes = { categories: { categoryName: string; score: number }[] }[]
+
+function buildMorphMap(scene: THREE.Object3D): MorphMap {
+  const map = new Map<string, MorphEntry[]>()
+  scene.traverse((obj) => {
+    const mesh = obj as THREE.SkinnedMesh
+    if (!mesh.isSkinnedMesh || !mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return
+    for (const [name, index] of Object.entries(mesh.morphTargetDictionary)) {
+      const list = map.get(name) ?? []
+      list.push({ mesh, index })
+      map.set(name, list)
+    }
+  })
+  return map
+}
+
+function applyBlendshapes(morphMap: MorphMap, blendshapes: FaceBlendshapes) {
+  if (!blendshapes.length) {
+    // No face detected — reset all to rest
+    for (const entries of morphMap.values()) {
+      for (const { mesh, index } of entries) mesh.morphTargetInfluences![index] = 0
+    }
+    return
+  }
+  for (const { categoryName, score } of blendshapes[0].categories) {
+    const entries = morphMap.get(categoryName)
+    if (!entries) continue
+    for (const { mesh, index } of entries) mesh.morphTargetInfluences![index] = score
+  }
 }
 
 function mpToScene(point: MpPoint): Vec3 {
@@ -337,6 +376,7 @@ export default function AvatarStage() {
     track(() => observer.disconnect())
 
     let rig: AvatarRig | null = null
+    let morphMap: MorphMap = new Map()
     let smoothed: BodyPose = { left: null, right: null, head: null }
     const leftFilter = new ArmFilter()
     const rightFilter = new ArmFilter()
@@ -358,6 +398,7 @@ export default function AvatarStage() {
         try {
           const pose = trackers.pose.detectForVideo(video, timestamp)
           const hands = trackers.hands.detectForVideo(video, timestamp)
+          const faceResult = trackers.face.detectForVideo(video, timestamp)
           const handSides = assignHands(pose.landmarks?.[0], hands)
           drawOverlay(overlay, video, pose, hands, handSides)
           const body = toBodyPose(pose, hands, handSides)
@@ -371,6 +412,7 @@ export default function AvatarStage() {
             head: headFilter.filter(heldHead.head, dt),
           }
           if (smoothed.left || smoothed.right || smoothed.head) rig.apply(smoothed, dt)
+          applyBlendshapes(morphMap, faceResult.faceBlendshapes ?? [])
         } catch {
           // A skipped video frame can repeat a timestamp. The next frame recovers.
         }
@@ -386,6 +428,7 @@ export default function AvatarStage() {
 
         scene.add(gltf.scene)
         rig = new AvatarRig(gltf.scene)
+        morphMap = buildMorphMap(gltf.scene)
         track(() => {
           gltf.scene.traverse((object) => {
             const mesh = object as THREE.Mesh
@@ -401,7 +444,7 @@ export default function AvatarStage() {
 
         const create = async (delegate: 'GPU' | 'CPU') => {
           const base = { modelAssetPath: '', delegate }
-          const [pose, hands] = await Promise.all([
+          const [pose, hands, face] = await Promise.all([
             PoseLandmarker.createFromOptions(vision, {
               baseOptions: { ...base, modelAssetPath: POSE_MODEL },
               runningMode: 'VIDEO',
@@ -412,8 +455,14 @@ export default function AvatarStage() {
               runningMode: 'VIDEO',
               numHands: 2,
             }),
+            FaceLandmarker.createFromOptions(vision, {
+              baseOptions: { ...base, modelAssetPath: FACE_MODEL },
+              runningMode: 'VIDEO',
+              numFaces: 1,
+              outputFaceBlendshapes: true,
+            }),
           ])
-          return { pose, hands }
+          return { pose, hands, face }
         }
 
         let trackers: Trackers
@@ -425,12 +474,14 @@ export default function AvatarStage() {
         if (cancelled) {
           trackers.pose.close()
           trackers.hands.close()
+          trackers.face.close()
           return
         }
         trackersRef.current = trackers
         track(() => {
           trackers.pose.close()
           trackers.hands.close()
+          trackers.face.close()
           trackersRef.current = null
         })
         setReady(true)
