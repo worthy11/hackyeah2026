@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Gloss -> Polish translation; disabled when the key is empty.
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-3.8-flash"
+    # Directory for uploaded videos and extracted landmarks (relative to CWD or absolute).
+    MEDIA_DIR: str = "media"
 
     @property
     def cors_origin_list(self) -> list[str]:

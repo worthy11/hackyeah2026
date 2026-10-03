@@ -1,0 +1,29 @@
+[
+  {
+    "id": -1,
+    "gloss": "CZEŚĆ",
+    "category_id": 1,
+    "video_file": "gesture_1.mp4",
+    "start_ms": null,
+    "end_ms": null,
+    "landmarks_file": null
+  },
+  {
+    "id": -2,
+    "gloss": "DZIĘKUJĘ",
+    "category_id": 1,
+    "video_file": "gesture_2.mp4",
+    "start_ms": null,
+    "end_ms": null,
+    "landmarks_file": null
+  },
+  {
+    "id": -3,
+    "gloss": "DO WIDZENIA",
+    "category_id": 1,
+    "video_file": "gesture_3.mp4",
+    "start_ms": null,
+    "end_ms": null,
+    "landmarks_file": null
+  }
+]

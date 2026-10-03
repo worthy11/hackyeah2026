@@ -6,14 +6,8 @@ type Props = { onSelect: (category: Category) => void }
 export function CategoryGrid({ onSelect }: Props) {
   return (
     <main className="learn-view">
-      <header className="learn-header">
-        <span className="eyebrow eyebrow--green">Moja nauka</span>
-        <h2>Wybierz temat</h2>
-        <p>Ćwicz gesty i frazy pogrupowane tematycznie</p>
-      </header>
-
       <div className="category-grid">
-        {categories.map(cat => {
+        {[...categories].sort((a, b) => a.name.localeCompare(b.name, 'pl')).map(cat => {
           const gestureCount = gestures.filter(g => g.categoryId === cat.id).length
           const phraseCount  = phrases.filter(p => p.categoryId  === cat.id).length
           return (
@@ -29,7 +23,7 @@ export function CategoryGrid({ onSelect }: Props) {
               <strong className="category-name">{cat.name}</strong>
               <span className="category-desc">{cat.description}</span>
               <span className="category-meta">
-                {gestureCount} gestów · {phraseCount} fraz
+                {gestureCount} gestów · {phraseCount} zdań
               </span>
             </button>
           )

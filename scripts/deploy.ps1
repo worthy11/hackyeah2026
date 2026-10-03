@@ -97,3 +97,8 @@ Write-Host "  Web:  https://$WebFqdn"
 Write-Host "  API:  https://$ApiFqdn"
 Write-Host "  Docs: https://$ApiFqdn/docs"
 Write-Host "  Health: https://$ApiFqdn/health"
+
+Write-Host ""
+Write-Host "==> Cleaning up local Docker images and build cache..."
+docker image prune -af --filter "until=24h"
+docker builder prune -af

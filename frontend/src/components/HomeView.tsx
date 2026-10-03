@@ -1,13 +1,13 @@
 import { Icon } from './Icon'
-import { gestures, gestureMap } from '../data/mockLearning'
+import { gestureMap, type Gesture } from '../data/mockLearning'
 
 // Mock: last 5 gestures the user practiced
 const recentGestureIds = [101, 201, 401, 501, 303, 602]
 const recentGestures = recentGestureIds.map(id => gestureMap[id]).filter(Boolean)
 
-type Props = { onNavigate: (item: string) => void }
+type Props = { onNavigate: (item: string) => void; onPractice: (gesture: Gesture) => void }
 
-export function HomeView({ onNavigate }: Props) {
+export function HomeView({ onNavigate, onPractice }: Props) {
   return (
     <main className="home-view">
 
@@ -38,7 +38,7 @@ export function HomeView({ onNavigate }: Props) {
           </span>
           <span className="hero-tile__body">
             <strong>Przeglądaj tematy</strong>
-            <span>Ćwicz gesty i frazy pogrupowane tematycznie</span>
+            <span>Ćwicz gesty i zdania!</span>
           </span>
           <Icon name="arrow" size={20} />
         </button>
@@ -49,7 +49,12 @@ export function HomeView({ onNavigate }: Props) {
         <h3 className="home-section-title">Ostatnio ćwiczone</h3>
         <div className="gesture-grid">
           {recentGestures.map(g => (
-            <div key={g.id} className="gesture-card">
+            <button
+              key={g.id}
+              className="gesture-card gesture-card--btn"
+              type="button"
+              onClick={() => onPractice(g)}
+            >
               <div className="gesture-video-placeholder">
                 {g.videoPath
                   ? <video src={g.videoPath} loop muted playsInline />
@@ -57,7 +62,7 @@ export function HomeView({ onNavigate }: Props) {
                 }
               </div>
               <span className="gesture-gloss">{g.gloss}</span>
-            </div>
+            </button>
           ))}
         </div>
       </section>

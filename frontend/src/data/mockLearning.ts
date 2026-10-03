@@ -22,13 +22,21 @@ export type Phrase = {
 }
 
 export const categories: Category[] = [
-  { id: 1, name: 'Powitania',            description: 'Przywitanie i small talk',       icon: 'hand'       },
-  { id: 2, name: 'Rodzina',              description: 'Członkowie rodziny',              icon: 'people'     },
-  { id: 3, name: 'Wygląd',              description: 'Opis wyglądu i cech fizycznych',  icon: 'eye'        },
-  { id: 4, name: 'Emocje',              description: 'Wyrażanie uczuć i nastrojów',     icon: 'heart'      },
-  { id: 5, name: 'Kierunki i transport', description: 'Nawigacja i środki transportu',  icon: 'map'        },
-  { id: 6, name: 'Jedzenie',            description: 'Produkty i posiłki',              icon: 'food'       },
-  { id: 7, name: 'Alfabet',             description: 'Wszystkie litery polskiego alfabetu', icon: 'vocabulary' },
+  { id:  1, name: 'Powitania',            description: 'Przywitanie i small talk',          icon: 'hand'       },
+  { id:  2, name: 'Rodzina',              description: 'Członkowie rodziny',                icon: 'people'     },
+  { id:  3, name: 'Wygląd',              description: 'Opis wyglądu i cech fizycznych',    icon: 'eye'        },
+  { id:  4, name: 'Emocje',              description: 'Wyrażanie uczuć i nastrojów',       icon: 'heart'      },
+  { id:  5, name: 'Kierunki i transport', description: 'Nawigacja i środki transportu',    icon: 'map'        },
+  { id:  6, name: 'Jedzenie',            description: 'Produkty i posiłki',                icon: 'food'       },
+  { id:  7, name: 'Alfabet',             description: 'Wszystkie litery polskiego alfabetu', icon: 'vocabulary' },
+  { id:  8, name: 'Czas',               description: 'Dni, godziny, pory dnia i roku',    icon: 'clock'      },
+  { id:  9, name: 'Dom i mieszkanie',    description: 'Pomieszczenia, meble, codzienność', icon: 'home'       },
+  { id: 10, name: 'Kolory',             description: 'Nazwy kolorów',                      icon: 'palette'    },
+  { id: 11, name: 'Liczby',             description: 'Cyfry i liczby',                     icon: 'hash'       },
+  { id: 12, name: 'Pogoda',             description: 'Warunki atmosferyczne i pory roku',  icon: 'cloud'      },
+  { id: 13, name: 'Zakupy',             description: 'Sklep, ceny, produkty',              icon: 'bag'        },
+  { id: 14, name: 'Szkoła i praca',     description: 'Edukacja i środowisko pracy',       icon: 'book'       },
+  { id: 15, name: 'Zdrowie',            description: 'Samopoczucie, ciało, lekarz',        icon: 'health'     },
 ]
 
 export const gestures: Gesture[] = [
@@ -79,6 +87,83 @@ export const gestures: Gesture[] = [
   { id: 604, categoryId: 6, gloss: 'MLEKO',    videoPath: null },
   { id: 605, categoryId: 6, gloss: 'KAWA',     videoPath: null },
   { id: 606, categoryId: 6, gloss: 'HERBATA',  videoPath: null },
+
+  // Czas (8)
+  { id: 801, categoryId: 8, gloss: 'DZIŚ',        videoPath: null },
+  { id: 802, categoryId: 8, gloss: 'JUTRO',       videoPath: null },
+  { id: 803, categoryId: 8, gloss: 'WCZORAJ',     videoPath: null },
+  { id: 804, categoryId: 8, gloss: 'TERAZ',       videoPath: null },
+  { id: 805, categoryId: 8, gloss: 'RANO',        videoPath: null },
+  { id: 806, categoryId: 8, gloss: 'WIECZÓR',     videoPath: null },
+  { id: 807, categoryId: 8, gloss: 'TYDZIEŃ',     videoPath: null },
+  { id: 808, categoryId: 8, gloss: 'MIESIĄC',     videoPath: null },
+  { id: 809, categoryId: 8, gloss: 'ROK',         videoPath: null },
+
+  // Dom i mieszkanie (9)
+  { id: 901, categoryId: 9, gloss: 'DOM',         videoPath: null },
+  { id: 902, categoryId: 9, gloss: 'POKÓJ',       videoPath: null },
+  { id: 903, categoryId: 9, gloss: 'KUCHNIA',     videoPath: null },
+  { id: 904, categoryId: 9, gloss: 'ŁAZIENKA',    videoPath: null },
+  { id: 905, categoryId: 9, gloss: 'STÓŁ',        videoPath: null },
+  { id: 906, categoryId: 9, gloss: 'KRZESŁO',     videoPath: null },
+  { id: 907, categoryId: 9, gloss: 'ŁÓŻKO',       videoPath: null },
+  { id: 908, categoryId: 9, gloss: 'OKNO',        videoPath: null },
+
+  // Kolory (10)
+  { id: 1001, categoryId: 10, gloss: 'CZERWONY',  videoPath: null },
+  { id: 1002, categoryId: 10, gloss: 'NIEBIESKI', videoPath: null },
+  { id: 1003, categoryId: 10, gloss: 'ZIELONY',   videoPath: null },
+  { id: 1004, categoryId: 10, gloss: 'ŻÓŁTY',     videoPath: null },
+  { id: 1005, categoryId: 10, gloss: 'CZARNY',    videoPath: null },
+  { id: 1006, categoryId: 10, gloss: 'BIAŁY',     videoPath: null },
+  { id: 1007, categoryId: 10, gloss: 'RÓŻOWY',    videoPath: null },
+  { id: 1008, categoryId: 10, gloss: 'BRĄZOWY',   videoPath: null },
+
+  // Liczby (11)
+  { id: 1101, categoryId: 11, gloss: 'JEDEN',     videoPath: null },
+  { id: 1102, categoryId: 11, gloss: 'DWA',       videoPath: null },
+  { id: 1103, categoryId: 11, gloss: 'TRZY',      videoPath: null },
+  { id: 1104, categoryId: 11, gloss: 'CZTERY',    videoPath: null },
+  { id: 1105, categoryId: 11, gloss: 'PIĘĆ',      videoPath: null },
+  { id: 1106, categoryId: 11, gloss: 'SZEŚĆ',     videoPath: null },
+  { id: 1107, categoryId: 11, gloss: 'SIEDEM',    videoPath: null },
+  { id: 1108, categoryId: 11, gloss: 'OSIEM',     videoPath: null },
+  { id: 1109, categoryId: 11, gloss: 'DZIEWIĘĆ',  videoPath: null },
+  { id: 1110, categoryId: 11, gloss: 'DZIESIĘĆ',  videoPath: null },
+
+  // Pogoda (12)
+  { id: 1201, categoryId: 12, gloss: 'SŁOŃCE',    videoPath: null },
+  { id: 1202, categoryId: 12, gloss: 'DESZCZ',    videoPath: null },
+  { id: 1203, categoryId: 12, gloss: 'ŚNIEG',     videoPath: null },
+  { id: 1204, categoryId: 12, gloss: 'WIATR',     videoPath: null },
+  { id: 1205, categoryId: 12, gloss: 'CIEPŁO',    videoPath: null },
+  { id: 1206, categoryId: 12, gloss: 'ZIMNO',     videoPath: null },
+  { id: 1207, categoryId: 12, gloss: 'LATO',      videoPath: null },
+  { id: 1208, categoryId: 12, gloss: 'ZIMA',      videoPath: null },
+
+  // Zakupy (13)
+  { id: 1301, categoryId: 13, gloss: 'SKLEP',     videoPath: null },
+  { id: 1302, categoryId: 13, gloss: 'CENA',      videoPath: null },
+  { id: 1303, categoryId: 13, gloss: 'DROGI',     videoPath: null },
+  { id: 1304, categoryId: 13, gloss: 'TANI',      videoPath: null },
+  { id: 1305, categoryId: 13, gloss: 'KUPIĆ',     videoPath: null },
+  { id: 1306, categoryId: 13, gloss: 'PŁACIĆ',    videoPath: null },
+
+  // Szkoła i praca (14)
+  { id: 1401, categoryId: 14, gloss: 'SZKOŁA',    videoPath: null },
+  { id: 1402, categoryId: 14, gloss: 'PRACA',     videoPath: null },
+  { id: 1403, categoryId: 14, gloss: 'UCZYĆ SIĘ', videoPath: null },
+  { id: 1404, categoryId: 14, gloss: 'NAUCZYCIEL', videoPath: null },
+  { id: 1405, categoryId: 14, gloss: 'KSIĄŻKA',   videoPath: null },
+  { id: 1406, categoryId: 14, gloss: 'KOMPUTER',  videoPath: null },
+
+  // Zdrowie (15)
+  { id: 1501, categoryId: 15, gloss: 'LEKARZ',    videoPath: null },
+  { id: 1502, categoryId: 15, gloss: 'SZPITAL',   videoPath: null },
+  { id: 1503, categoryId: 15, gloss: 'BÓL',       videoPath: null },
+  { id: 1504, categoryId: 15, gloss: 'ZDROWY',    videoPath: null },
+  { id: 1505, categoryId: 15, gloss: 'CHORY',     videoPath: null },
+  { id: 1506, categoryId: 15, gloss: 'LEKARSTWO', videoPath: null },
 
   // Alfabet (7)
   { id: 701, categoryId: 7, gloss: 'A',  videoPath: null },

@@ -1,11 +1,24 @@
 import { Icon } from './Icon'
 
-export function DashboardHeader({ onHome }: { onHome?: () => void }) {
+const VIEW_LABELS: Record<string, string> = {
+  'Tłumacz':        'Tłumacz',
+  'Moja nauka':     'Moja nauka',
+  'Słownictwo':     'Słownictwo',
+  'Rozmowy':        'Rozmowy',
+  'Moje materiały': 'Moje materiały',
+  'Dodaj nagranie': 'Dodaj nagranie',
+  'O projekcie':    'O projekcie',
+}
+
+export function DashboardHeader({ onHome: _onHome, activeItem = 'home' }: { onHome?: () => void; activeItem?: string }) {
+  const isHome = activeItem === 'home'
   return (
     <header className="topbar">
       <div className="greeting">
-        <h1>Dzień dobry, Anno</h1>
-        <p>Co dziś zamigasz?</p>
+        {isHome
+          ? <><h1>Dzień dobry, Anno</h1><p>Co dziś zamigasz?</p></>
+          : <h1>{VIEW_LABELS[activeItem] ?? activeItem}</h1>
+        }
       </div>
       <div className="account-actions">
         <button aria-label="Powiadomienia" className="icon-button notification-button" type="button">

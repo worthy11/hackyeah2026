@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { Icon } from '../Icon'
-import { gestures, phrases, gestureMap, type Category, type Gesture } from '../../data/mockLearning'
+import { gestures, phrases, gestureMap, type Category, type Gesture, type Phrase } from '../../data/mockLearning'
 import { GesturePractice } from './GesturePractice'
+import { PhrasePractice } from './PhrasePractice'
 
 type Props = { category: Category; onBack: () => void }
 
 export function CategoryDetail({ category, onBack }: Props) {
-  const [practicing, setPracticing] = useState<Gesture | null>(null)
+  const [practicingGesture, setPracticingGesture] = useState<Gesture | null>(null)
+  const [practicingPhrase,  setPracticingPhrase]  = useState<Phrase  | null>(null)
+
   const catGestures = gestures.filter(g => g.categoryId === category.id)
   const catPhrases  = phrases.filter(p => p.categoryId  === category.id)
 
-  if (practicing) {
-    return <GesturePractice gesture={practicing} onBack={() => setPracticing(null)} />
-  }
+  if (practicingGesture) return <GesturePractice gesture={practicingGesture} onBack={() => setPracticingGesture(null)} />
+  if (practicingPhrase)  return <PhrasePractice  phrase={practicingPhrase}   onBack={() => setPracticingPhrase(null)} />
 
   return (
     <main className="learn-view">
@@ -26,7 +28,6 @@ export function CategoryDetail({ category, onBack }: Props) {
           <Icon name={category.icon} size={28} />
         </span>
         <h2>{category.name}</h2>
-        <p>{category.description}</p>
       </header>
 
       <section className="learn-section">
@@ -36,34 +37,40 @@ export function CategoryDetail({ category, onBack }: Props) {
             <button
               key={g.id}
               className="gesture-card gesture-card--btn"
+              onClick={() => setPracticingGesture(g)}
               type="button"
-              onClick={() => setPracticing(g)}
             >
-              <div className="gesture-video-placeholder">
-                {g.videoPath
-                  ? <video src={g.videoPath} loop muted playsInline />
-                  : <span><Icon name="play" size={24} /></span>
-                }
-              </div>
               <span className="gesture-gloss">{g.gloss}</span>
+              <span className="gesture-practice-hint">
+                <Icon name="play" size={11} /> Ćwicz
+              </span>
             </button>
           ))}
         </div>
       </section>
 
       <section className="learn-section">
-        <h3 className="learn-section-title">Frazy ({catPhrases.length})</h3>
+        <h3 className="learn-section-title">Zdania ({catPhrases.length})</h3>
         <div className="phrase-list">
           {catPhrases.map(p => (
             <div key={p.id} className="phrase-card">
-              <span className="phrase-translation">{p.translation}</span>
-              <div className="phrase-gestures">
-                {p.gestureIds.map((gid, i) => (
-                  <span key={i} className="phrase-gesture-chip">
-                    {gestureMap[gid]?.gloss ?? '?'}
-                  </span>
-                ))}
+              <div className="phrase-card__content">
+                <span className="phrase-translation">{p.translation}</span>
+                <div className="phrase-gestures">
+                  {p.gestureIds.map((gid, i) => (
+                    <span key={i} className="phrase-gesture-chip">
+                      {gestureMap[gid]?.gloss ?? '?'}
+                    </span>
+                  ))}
+                </div>
               </div>
+              <button
+                className="primary-button primary-button--sm"
+                onClick={() => setPracticingPhrase(p)}
+                type="button"
+              >
+                <Icon name="play" size={14} /> Ćwicz
+              </button>
             </div>
           ))}
         </div>

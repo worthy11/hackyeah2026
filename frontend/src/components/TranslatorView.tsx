@@ -48,7 +48,7 @@ export function TranslatorView() {
       const res = await fetch('/api/sign-language/translate', { method: 'POST', body: form })
       if (!res.ok) {
         const detail = await res.json().catch(() => ({}))
-        throw new Error(detail?.detail ?? `HTTP ${res.status}`)
+        throw new Error(detail?.detail ?? `HTTP ${res.status} ${res.statusText}`)
       }
       const data: TranslationResult = await res.json()
       setResult(data)
@@ -61,12 +61,6 @@ export function TranslatorView() {
 
   return (
     <main className="translator-view">
-      <header className="learn-header">
-        <span className="eyebrow eyebrow--green">Tłumacz</span>
-        <h2>Tłumaczenie PJM → Polski</h2>
-        <p>Prześlij lub nagraj film z gestami, a my go przetłumaczymy</p>
-      </header>
-
       {/* Mode toggle */}
       <div className="mode-tabs">
         <button
@@ -81,7 +75,7 @@ export function TranslatorView() {
           onClick={() => { setMode('record'); reset() }}
           type="button"
         >
-          <Icon name="play" size={16} /> Nagraj z kamery
+          <Icon name="play" size={16} /> Nagraj
         </button>
       </div>
 
@@ -133,6 +127,14 @@ type UploadPaneProps = {
 
 function UploadPane({ file, dragOver, status, onFile, onDragOver, onSubmit, onReset }: UploadPaneProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [previewURL, setPreviewURL] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!file) { setPreviewURL(null); return }
+    const url = URL.createObjectURL(file)
+    setPreviewURL(url)
+    return () => URL.revokeObjectURL(url)
+  }, [file])
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault()
@@ -163,12 +165,22 @@ function UploadPane({ file, dragOver, status, onFile, onDragOver, onSubmit, onRe
           />
         </div>
       ) : (
-        <div className="upload-selected">
-          <Icon name="materials" size={20} />
-          <span>{file.name}</span>
-          <span className="upload-size">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-          <button className="back-button" onClick={onReset} type="button">Usuń</button>
-        </div>
+        <>
+          <div className="upload-selected">
+            <Icon name="materials" size={20} />
+            <span>{file.name}</span>
+            <span className="upload-size">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
+            <button className="back-button" onClick={onReset} type="button">Usuń</button>
+          </div>
+          {previewURL && (
+            <video
+              src={previewURL}
+              className="upload-preview"
+              controls
+              preload="metadata"
+            />
+          )}
+        </>
       )}
 
       <div className="translator-actions">
@@ -194,23 +206,37 @@ type RecordPaneProps = {
 }
 
 function RecordPane({ status, onSubmit, onReset }: RecordPaneProps) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const mediaRef = useRef<MediaRecorder | null>(null)
-  const chunksRef = useRef<BlobPart[]>([])
+  const videoRef   = useRef<HTMLVideoElement>(null)
+  const mediaRef   = useRef<MediaRecorder | null>(null)
+  const chunksRef  = useRef<BlobPart[]>([])
+  const streamRef  = useRef<MediaStream | null>(null)
+  const [facing, setFacing]     = useState<'user' | 'environment'>('user')
   const [recording, setRecording] = useState(false)
-  const [blob, setBlob] = useState<Blob | null>(null)
-  const [camError, setCamError] = useState<string | null>(null)
+  const [blob, setBlob]           = useState<Blob | null>(null)
+  const [camError, setCamError]   = useState<string | null>(null)
 
-  async function startCamera() {
+  async function startCamera(facingMode: 'user' | 'environment' = facing) {
+    streamRef.current?.getTracks().forEach(t => t.stop())
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode },
+        audio: false,
+      })
+      streamRef.current = stream
       if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play() }
+      setCamError(null)
     } catch {
       setCamError('Brak dostępu do kamery. Sprawdź uprawnienia przeglądarki.')
     }
   }
 
-  useEffect(() => { startCamera() }, [])
+  useEffect(() => { startCamera(); return () => streamRef.current?.getTracks().forEach(t => t.stop()) }, [])
+
+  async function flipCamera() {
+    const next = facing === 'user' ? 'environment' : 'user'
+    setFacing(next)
+    await startCamera(next)
+  }
 
   function startRecording() {
     const stream = videoRef.current?.srcObject as MediaStream | null
@@ -218,25 +244,16 @@ function RecordPane({ status, onSubmit, onReset }: RecordPaneProps) {
     chunksRef.current = []
     const mr = new MediaRecorder(stream, { mimeType: 'video/webm' })
     mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-    mr.onstop = () => {
-      const b = new Blob(chunksRef.current, { type: 'video/webm' })
-      setBlob(b)
-    }
+    mr.onstop = () => setBlob(new Blob(chunksRef.current, { type: 'video/webm' }))
     mr.start()
     mediaRef.current = mr
     setRecording(true)
     setBlob(null)
   }
 
-  function stopRecording() {
-    mediaRef.current?.stop()
-    setRecording(false)
-  }
+  function stopRecording() { mediaRef.current?.stop(); setRecording(false) }
 
-  function handleReset() {
-    setBlob(null)
-    onReset()
-  }
+  function handleReset() { setBlob(null); onReset() }
 
   if (camError) {
     return <div className="translator-status translator-status--error"><Icon name="info" size={18} /> {camError}</div>
@@ -247,6 +264,11 @@ function RecordPane({ status, onSubmit, onReset }: RecordPaneProps) {
       <div className="record-preview-wrap">
         <video ref={videoRef} className="record-preview" muted playsInline />
         {recording && <span className="record-indicator" />}
+        {!recording && !blob && (
+          <button className="cam-flip-btn" onClick={flipCamera} type="button" aria-label="Odwróć kamerę">
+            <Icon name="flip-camera" size={22} />
+          </button>
+        )}
       </div>
 
       <div className="translator-actions">

@@ -44,12 +44,6 @@ export function VocabularyView() {
 
   return (
     <main className="learn-view">
-      <header className="learn-header">
-        <span className="eyebrow eyebrow--green">Słownictwo</span>
-        <h2>Wszystkie gesty</h2>
-        <p>{visible.length} z {gestures.length} znaków</p>
-      </header>
-
       {/* Dropdown filter */}
       <div className="vocab-dropdown-wrap" ref={dropdownRef}>
         <button
