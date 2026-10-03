@@ -18,6 +18,16 @@ build/
 .coverage
 htmlcov/
 
+# Model weights, datasets, research notebooks
+backend/translation/data/
+*.pth
+*.safetensors
+*.ipynb
+
+# Local sign language tooling (data collection, training, test UI)
+sign_data_collection/
+dev_ui/
+
 # Environment
 .env
 .env.*

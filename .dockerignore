@@ -18,5 +18,9 @@ frontend/.vite
 **/.mypy_cache
 **/.ruff_cache
 **/*.log
+**/*.ipynb
+backend/translation/data/data_*.pth
+sign_data_collection
+dev_ui
 Thumbs.db
 .DS_Store
