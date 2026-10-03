@@ -8,7 +8,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { AvatarRig, type ArmPose, type BodyPose, type Vec3 } from './rig'
 
-const AVATAR_URL = encodeURI('/character-avatar/source/MAXMUD Avatar.glb')
+const AVATAR_URL = '/654230026_avatar_sdk.glb'
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
 const POSE_MODEL =
   'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task'
@@ -37,13 +37,6 @@ function mpToScene(point: MpPoint): Vec3 {
     y: -point.y,
     z: -point.z,
   }
-}
-
-// Hand world landmarks point +Z toward the camera. Pose landmarks use the opposite depth sign.
-function mpHandToScene(point: MpPoint): Vec3 {
-  const scene = mpToScene(point)
-  scene.z = -scene.z
-  return scene
 }
 
 function sourceSide(avatarSide: Side): Side {
@@ -91,7 +84,7 @@ function toBodyPose(
     const avatarSide = sourceSide(detected)
     const arm = avatarSide === 'Left' ? body.left : body.right
     if (!arm) return
-    arm.hand = landmarks.map((point) => mpHandToScene(point))
+    arm.hand = landmarks.map((point) => mpToScene(point))
   })
 
   return body
@@ -105,25 +98,136 @@ function mix(a: Vec3, b: Vec3, amount: number): Vec3 {
   }
 }
 
-function smoothArm(previous: ArmPose | null, next: ArmPose | null): ArmPose | null {
+function smoothArm(
+  previous: ArmPose | null,
+  next: ArmPose | null,
+  armAlpha: number,
+  handAlpha: number,
+): ArmPose | null {
   if (!next) return null
   if (!previous) return next
-  const amount = 0.62
   const hand =
     next.hand && previous.hand && previous.hand.length === next.hand.length
-      ? next.hand.map((point, index) => mix(previous.hand![index], point, amount))
+      ? next.hand.map((point, index) => mix(previous.hand![index], point, handAlpha))
       : next.hand
   return {
-    shoulder: mix(previous.shoulder, next.shoulder, amount),
-    elbow: mix(previous.elbow, next.elbow, amount),
-    wrist: mix(previous.wrist, next.wrist, amount),
+    shoulder: mix(previous.shoulder, next.shoulder, armAlpha),
+    elbow: mix(previous.elbow, next.elbow, armAlpha),
+    wrist: mix(previous.wrist, next.wrist, armAlpha),
     hand,
   }
+}
+
+const POSE_LINKS: Array<[number, number]> = [
+  [11, 13],
+  [13, 15],
+  [12, 14],
+  [14, 16],
+  [11, 12],
+]
+
+const HAND_LINKS: Array<[number, number]> = [
+  [0, 1], [1, 2], [2, 3], [3, 4],
+  [0, 5], [5, 6], [6, 7], [7, 8],
+  [5, 9], [9, 13], [13, 17],
+  [0, 9], [9, 10], [10, 11], [11, 12],
+  [0, 13], [13, 14], [14, 15], [15, 16],
+  [0, 17], [17, 18], [18, 19], [19, 20],
+]
+
+function drawOverlay(
+  canvas: HTMLCanvasElement,
+  video: HTMLVideoElement,
+  pose: { landmarks?: MpPoint[][] },
+  hands: { landmarks?: MpPoint[][]; handedness?: { categoryName?: string }[][] },
+) {
+  const ctx = canvas.getContext('2d')
+  if (!ctx || video.videoWidth === 0) return
+  if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+  }
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+  const body = pose.landmarks?.[0]
+  if (body) {
+    drawLinks(ctx, body, POSE_LINKS, '#67e8f9', canvas.width, canvas.height)
+    labelPoint(ctx, body[15], 'L', '#67e8f9', canvas.width, canvas.height)
+    labelPoint(ctx, body[16], 'R', '#67e8f9', canvas.width, canvas.height)
+  }
+
+  hands.landmarks?.forEach((points, index) => {
+    const name = hands.handedness?.[index]?.[0]?.categoryName
+    const color = name === 'Left' ? '#fbbf24' : '#86efac'
+    drawLinks(ctx, points, HAND_LINKS, color, canvas.width, canvas.height)
+    labelPoint(ctx, points[0], name === 'Left' ? 'left' : 'right', color, canvas.width, canvas.height)
+  })
+}
+
+function mirrorX(point: MpPoint, width: number) {
+  return (1 - point.x) * width
+}
+
+function drawLinks(
+  ctx: CanvasRenderingContext2D,
+  points: MpPoint[],
+  links: Array<[number, number]>,
+  color: string,
+  width: number,
+  height: number,
+) {
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = Math.max(2, width * 0.004)
+  ctx.beginPath()
+  for (const [start, end] of links) {
+    const from = points[start]
+    const to = points[end]
+    if (!from || !to || !visible(points, start) || !visible(points, end)) continue
+    ctx.moveTo(mirrorX(from, width), from.y * height)
+    ctx.lineTo(mirrorX(to, width), to.y * height)
+  }
+  ctx.stroke()
+
+  const seen = new Set<number>()
+  for (const [start, end] of links) {
+    seen.add(start)
+    seen.add(end)
+  }
+  for (const index of seen) {
+    const point = points[index]
+    if (!point || !visible(points, index)) continue
+    ctx.beginPath()
+    ctx.arc(mirrorX(point, width), point.y * height, Math.max(3, width * 0.008), 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function labelPoint(
+  ctx: CanvasRenderingContext2D,
+  point: MpPoint | undefined,
+  text: string,
+  color: string,
+  width: number,
+  height: number,
+) {
+  if (!point) return
+  ctx.fillStyle = color
+  ctx.font = `bold ${Math.max(14, Math.round(width * 0.045))}px sans-serif`
+  ctx.fillText(text, mirrorX(point, width) + 8, point.y * height - 8)
+}
+
+function holdHand(next: ArmPose | null, previous: ArmPose | null, missed: number) {
+  if (!next) return { arm: null, missed: 0 }
+  if (next.hand) return { arm: next, missed: 0 }
+  if (previous?.hand && missed < 8) return { arm: { ...next, hand: previous.hand }, missed: missed + 1 }
+  return { arm: next, missed: missed + 1 }
 }
 
 export default function AvatarStage() {
   const containerRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
+  const overlayRef = useRef<HTMLCanvasElement>(null)
   const trackersRef = useRef<Trackers | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const [ready, setReady] = useState(false)
@@ -134,7 +238,8 @@ export default function AvatarStage() {
   useEffect(() => {
     const container = containerRef.current
     const video = videoRef.current
-    if (!container || !video) return
+    const overlay = overlayRef.current
+    if (!container || !video || !overlay) return
 
     let cancelled = false
     let raf = 0
@@ -180,10 +285,15 @@ export default function AvatarStage() {
 
     let rig: AvatarRig | null = null
     let smoothed: BodyPose = { left: null, right: null }
+    let leftMiss = 0
+    let rightMiss = 0
     let lastTimestamp = -1
+    let lastFrame = performance.now()
 
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
+      const dt = Math.min(0.05, Math.max(0.001, (now - lastFrame) / 1000))
+      lastFrame = now
       const trackers = trackersRef.current
       if (rig && trackers && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA && video.videoWidth > 0) {
         const timestamp = now <= lastTimestamp ? lastTimestamp + 1 : now
@@ -191,12 +301,19 @@ export default function AvatarStage() {
         try {
           const pose = trackers.pose.detectForVideo(video, timestamp)
           const hands = trackers.hands.detectForVideo(video, timestamp)
+          drawOverlay(overlay, video, pose, hands)
           const body = toBodyPose(pose, hands)
+          const left = holdHand(body.left, smoothed.left, leftMiss)
+          const right = holdHand(body.right, smoothed.right, rightMiss)
+          leftMiss = left.missed
+          rightMiss = right.missed
+          const armAlpha = 1 - Math.exp(-dt / 0.12)
+          const handAlpha = 1 - Math.exp(-dt / 0.2)
           smoothed = {
-            left: smoothArm(smoothed.left, body.left),
-            right: smoothArm(smoothed.right, body.right),
+            left: smoothArm(smoothed.left, left.arm, armAlpha, handAlpha),
+            right: smoothArm(smoothed.right, right.arm, armAlpha, handAlpha),
           }
-          if (smoothed.left || smoothed.right) rig.apply(smoothed)
+          if (smoothed.left || smoothed.right) rig.apply(smoothed, dt)
         } catch {
           // A skipped video frame can repeat a timestamp. The next frame recovers.
         }
@@ -303,18 +420,27 @@ export default function AvatarStage() {
 
   return (
     <section className="stage-wrap">
-      <div className="stage" ref={containerRef}>
-        <video ref={videoRef} className={tracking ? 'preview preview--live' : 'preview'} playsInline muted />
-        {!tracking && (
-          <div className="stage-overlay">
-            <p>{cameraError ?? message}</p>
-            <button type="button" onClick={() => void startCamera()} disabled={!ready}>
-              Use my camera
-            </button>
-          </div>
-        )}
+      <div className="stage-row">
+        <div className="stage" ref={containerRef}>
+          {!tracking && (
+            <div className="stage-overlay">
+              <p>{cameraError ?? message}</p>
+              <button type="button" onClick={() => void startCamera()} disabled={!ready}>
+                Use my camera
+              </button>
+            </div>
+          )}
+        </div>
+        <div className={tracking ? 'preview-frame preview-frame--live' : 'preview-frame'}>
+          <video ref={videoRef} className="preview" playsInline muted />
+          <canvas ref={overlayRef} className="preview-overlay" />
+        </div>
       </div>
-      {tracking && <p className="hint">{message} Video stays on this device.</p>}
+      {tracking && (
+        <p className="hint">
+          Cyan lines are the arms. Yellow is the left hand, green is the right. Video stays on this device.
+        </p>
+      )}
     </section>
   )
 }

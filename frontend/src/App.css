@@ -76,37 +76,69 @@ code {
   gap: 0.75rem;
 }
 
+.stage-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.75rem;
+}
+
 .stage {
   position: relative;
+  flex: 1;
+  min-width: 0;
   height: min(78vh, 720px);
   border-radius: 1rem;
   overflow: hidden;
   background: #d5dee8;
 }
 
-.stage canvas {
+.stage > canvas {
   display: block;
   width: 100%;
   height: 100%;
 }
 
-.preview {
-  position: absolute;
-  width: 1px;
-  height: 1px;
+.preview-frame {
+  position: relative;
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  overflow: hidden;
   opacity: 0;
   pointer-events: none;
+  border-radius: 0.65rem;
 }
 
-.preview--live {
-  left: 0.75rem;
-  bottom: 0.75rem;
-  width: 11rem;
+.preview-frame--live {
+  width: min(16rem, 28vw);
   height: auto;
   opacity: 1;
-  transform: scaleX(-1);
-  border-radius: 0.65rem;
   box-shadow: 0 8px 24px rgb(15 23 42 / 18%);
+}
+
+@media (max-width: 720px) {
+  .stage-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .preview-frame--live {
+    width: min(16rem, 100%);
+  }
+}
+
+.preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: scaleX(-1);
+}
+
+.preview-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 .stage-overlay {

@@ -11,6 +11,7 @@ Available gestures and phrases are grouped by topic. Start with common topics, s
 - greetings / small talk
 - describing appearance (height, weight, hair color/length, etc.)
 - describing emotions (joy, anger, sadness, surprise, etc.)
+- de
 
 ### B: Translation help
 

@@ -23,6 +23,9 @@ type BoneEntry = {
   restWorld: THREE.Quaternion
   forwardLocal: THREE.Vector3
   sideLocal: THREE.Vector3 | null
+  hingeLocal: THREE.Vector3 | null
+  curl: number
+  splay: number
 }
 
 const FINGERS = [
@@ -52,7 +55,17 @@ const _a = new THREE.Vector3()
 const _b = new THREE.Vector3()
 const _c = new THREE.Vector3()
 
-const SMOOTH = 0.45
+const _cross = new THREE.Vector3()
+
+const ARM_FOLLOW = 0.28
+const CURL_LIMIT = 1.75
+const SPLAY_LIMIT = 0.45
+const ANGLE_DEADZONE = 0.05
+const ANGLE_TAU = 0.1
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value))
+}
 
 function vec(v: Vec3, out = new THREE.Vector3()) {
   return out.set(v.x, v.y, v.z)
@@ -72,13 +85,19 @@ function basis(forward: THREE.Vector3, sideHint: THREE.Vector3, target: THREE.Ma
 
 export class AvatarRig {
   private readonly entries = new Map<string, BoneEntry>()
+  private readonly bones = new Map<string, THREE.Bone>()
   private readonly hingeSign = new Map<Side, THREE.Vector3>()
   private readonly acrossSign = new Map<Side, THREE.Vector3>()
-  private readonly root: THREE.Object3D
 
   constructor(root: THREE.Object3D) {
-    this.root = root
     root.updateMatrixWorld(true)
+    root.traverse((object) => {
+      const bone = object as THREE.Bone
+      if (!bone.isBone) return
+      this.bones.set(bone.name, bone)
+      const canonical = bone.name.replace(/_\d+$/, '')
+      if (canonical !== bone.name && !this.bones.has(canonical)) this.bones.set(canonical, bone)
+    })
     for (const side of ['Left', 'Right'] as const) {
       this.addChildAxis(`${side}Arm`, `${side}ForeArm`)
       this.addChildAxis(`${side}ForeArm`, `${side}Hand`)
@@ -88,15 +107,15 @@ export class AvatarRig {
     }
   }
 
-  apply(pose: BodyPose) {
-    this.applySide('Left', pose.left)
-    this.applySide('Right', pose.right)
+  apply(pose: BodyPose, dt = 1 / 60) {
+    this.applySide('Left', pose.left, dt)
+    this.applySide('Right', pose.right, dt)
   }
 
-  private applySide(side: Side, arm: ArmPose | null) {
+  private applySide(side: Side, arm: ArmPose | null, dt: number) {
     const armBones = this.armBoneNames(side)
     if (!arm) {
-      this.release(armBones)
+      this.release(armBones, dt)
       return
     }
 
@@ -106,35 +125,36 @@ export class AvatarRig {
     const upper = elbow.clone().sub(shoulder)
     const fore = wrist.clone().sub(elbow)
     const hinge = new THREE.Vector3().crossVectors(upper, fore)
-    const hingeOk = this.stabilizeHinge(side, hinge)
+    const hingeOk = hinge.lengthSq() > 0.0015 && this.stabilizeHinge(side, hinge)
 
     this.aim(`${side}Arm`, upper, hingeOk ? hinge : null)
     this.aim(`${side}ForeArm`, fore, hingeOk ? hinge : null)
 
     if (arm.hand && arm.hand.length >= 21) {
-      this.applyHand(side, arm.hand)
+      this.applyHand(side, arm.hand, dt)
     } else {
-      this.release(armBones.filter((name) => name !== `${side}Arm` && name !== `${side}ForeArm`))
+      this.release(
+        armBones.filter((name) => name !== `${side}Arm` && name !== `${side}ForeArm`),
+        dt,
+      )
     }
   }
 
-  private applyHand(side: Side, hand: Vec3[]) {
+  private applyHand(side: Side, hand: Vec3[], dt: number) {
     const wrist = vec(hand[0])
     const index = vec(hand[5])
     const middle = vec(hand[9])
     const pinky = vec(hand[17])
     const forward = middle.sub(wrist)
     const across = pinky.clone().sub(index)
-    const acrossOk = this.stabilizeVector(this.acrossSign, side, across)
 
-    this.aim(`${side}Hand`, forward, acrossOk ? across : null)
+    this.aim(`${side}Hand`, forward, this.handAcross(side, forward, across))
 
     for (const finger of FINGERS) {
       for (let segment = 0; segment < 3; segment++) {
         const from = vec(hand[finger.joints[segment]])
         const to = vec(hand[finger.joints[segment + 1]])
-        // Swing only. A palm-normal twist is often 180° off and the short blend then curls backward.
-        this.aim(`${side}Hand${finger.name}${segment + 1}`, to.sub(from), null)
+        this.curlFinger(`${side}Hand${finger.name}${segment + 1}`, to.sub(from), dt)
       }
     }
   }
@@ -151,7 +171,44 @@ export class AvatarRig {
         ? this.solveBasis(entry, forwardWorld, sideWorld)
         : this.solveSwing(entry, forwardWorld)
 
-    entry.bone.quaternion.slerp(solved, SMOOTH)
+    entry.bone.quaternion.slerp(solved, ARM_FOLLOW)
+    entry.bone.updateMatrixWorld()
+  }
+
+  private curlFinger(name: string, worldDir: THREE.Vector3, dt: number) {
+    const entry = this.entries.get(name)
+    if (!entry?.hingeLocal || !entry.sideLocal || worldDir.lengthSq() < 1e-8) return
+    const parent = entry.bone.parent
+    if (!parent) return
+
+    parent.getWorldQuaternion(_parentInv)
+    _forward.copy(worldDir).normalize().applyQuaternion(_parentInv.invert())
+    _forward.applyQuaternion(_qLocal.copy(entry.restLocal).invert())
+
+    const hinge = entry.hingeLocal
+    const forward = entry.forwardLocal
+    const curl = Math.atan2(_cross.crossVectors(forward, _forward).dot(hinge), forward.dot(_forward))
+    _solved.setFromAxisAngle(hinge, curl)
+    _restForward.copy(forward).applyQuaternion(_solved)
+    const splay = Math.atan2(_cross.crossVectors(_restForward, _forward).dot(entry.sideLocal), _restForward.dot(_forward))
+
+    entry.curl = this.followAngle(entry.curl, clamp(curl, -CURL_LIMIT, CURL_LIMIT), dt)
+    entry.splay = this.followAngle(entry.splay, clamp(splay, -SPLAY_LIMIT, SPLAY_LIMIT), dt)
+    this.writeFinger(entry)
+  }
+
+  private writeFinger(entry: BoneEntry) {
+    if (!entry.hingeLocal || !entry.sideLocal) return
+    _solved.setFromAxisAngle(entry.hingeLocal, entry.curl)
+    _delta.setFromAxisAngle(entry.sideLocal, entry.splay)
+    entry.bone.quaternion.copy(entry.restLocal).multiply(_delta).multiply(_solved)
+    entry.bone.updateMatrixWorld()
+  }
+
+  private followAngle(current: number, target: number, dt: number) {
+    if (Math.abs(target - current) < ANGLE_DEADZONE) return current
+    const alpha = 1 - Math.exp(-dt / ANGLE_TAU)
+    return current + (target - current) * alpha
   }
 
   private solveBasis(entry: BoneEntry, forwardWorld: THREE.Vector3, sideWorld: THREE.Vector3) {
@@ -173,10 +230,17 @@ export class AvatarRig {
     return _solved.copy(_desiredWorld).premultiply(_parentInv)
   }
 
-  private release(names: string[]) {
+  private release(names: string[], dt: number) {
     for (const name of names) {
       const entry = this.entries.get(name)
-      if (entry) entry.bone.quaternion.slerp(entry.restLocal, 0.2)
+      if (!entry) continue
+      if (entry.hingeLocal) {
+        entry.curl = this.followAngle(entry.curl, 0, dt)
+        entry.splay = this.followAngle(entry.splay, 0, dt)
+        this.writeFinger(entry)
+      } else {
+        entry.bone.quaternion.slerp(entry.restLocal, 0.15)
+      }
     }
   }
 
@@ -208,7 +272,7 @@ export class AvatarRig {
     const bone = this.find(name)
     const child = this.find(childName)
     if (!bone || !child) return
-    this.remember(bone, child.position)
+    this.remember(name, bone, child.position)
   }
 
   private addHand(side: Side) {
@@ -220,19 +284,40 @@ export class AvatarRig {
 
     const forward = middle.position.clone()
     const across = pinky.position.clone().sub(index.position)
-    this.remember(hand, forward, across)
-    const entry = this.entries.get(`${side}Hand`)
-    if (entry?.sideLocal) {
-      this.acrossSign.set(side, entry.sideLocal.clone().applyQuaternion(entry.restWorld).normalize())
-    }
+    this.remember(`${side}Hand`, hand, forward, across)
+  }
+
+  /** Pinky-to-index direction, kept only when it actually spans the palm. The sign is the landmark sign. */
+  private handAcross(side: Side, forward: THREE.Vector3, across: THREE.Vector3) {
+    _y.copy(forward).normalize()
+    _x.copy(across).addScaledVector(_y, -across.dot(_y))
+    if (_x.lengthSq() < 1e-4) return this.acrossSign.get(side)?.clone() ?? null
+    _x.normalize()
+    const prev = this.acrossSign.get(side)
+    if (prev) prev.copy(_x)
+    else this.acrossSign.set(side, _x.clone())
+    return _x.clone()
+  }
+
+  /** Direction the middle finger already flexes at rest. That side is the palm. */
+  private restPalmBend(side: Side) {
+    const proximal = this.find(`${side}HandMiddle1`)
+    const middle = this.find(`${side}HandMiddle2`)
+    const distal = this.find(`${side}HandMiddle3`)
+    if (!proximal || !middle || !distal) return null
+    const dirA = middle.position.clone().normalize().applyQuaternion(proximal.getWorldQuaternion(new THREE.Quaternion()))
+    const dirB = distal.position.clone().normalize().applyQuaternion(middle.getWorldQuaternion(new THREE.Quaternion()))
+    const bend = dirB.sub(dirA)
+    bend.addScaledVector(dirA, -bend.dot(dirA))
+    if (bend.lengthSq() < 1e-4) return null
+    return bend.normalize()
   }
 
   private addFingers(side: Side) {
     const hand = this.entries.get(`${side}Hand`)
     if (!hand?.sideLocal) return
 
-    const palmLocal = new THREE.Vector3().crossVectors(hand.forwardLocal, hand.sideLocal).normalize()
-    const palmWorld = palmLocal.applyQuaternion(hand.restWorld)
+    const palmWorld = this.restPalmBend(side) ?? new THREE.Vector3().crossVectors(hand.forwardLocal, hand.sideLocal).normalize().applyQuaternion(hand.restWorld)
 
     for (const finger of FINGERS) {
       for (let segment = 1; segment <= 3; segment++) {
@@ -242,13 +327,22 @@ export class AvatarRig {
         if (!bone || !child) continue
         const forward = child.position.clone()
         const restWorld = bone.getWorldQuaternion(new THREE.Quaternion())
-        const sideLocal = palmWorld.clone().applyQuaternion(restWorld.clone().invert())
+        const forwardWorld = forward.clone().normalize().applyQuaternion(restWorld)
+        const hingeWorld = new THREE.Vector3().crossVectors(forwardWorld, palmWorld)
+        if (hingeWorld.lengthSq() < 1e-8) continue
+        hingeWorld.normalize()
+        const restInverse = restWorld.clone().invert()
+        const hingeLocal = hingeWorld.applyQuaternion(restInverse)
+        const sideLocal = palmWorld.clone().applyQuaternion(restInverse)
         this.entries.set(name, {
           bone,
           restLocal: bone.quaternion.clone().normalize(),
           restWorld,
           forwardLocal: forward.normalize(),
           sideLocal,
+          hingeLocal,
+          curl: 0,
+          splay: 0,
         })
       }
     }
@@ -273,19 +367,21 @@ export class AvatarRig {
     }
   }
 
-  private remember(bone: THREE.Bone, forward: THREE.Vector3, side: THREE.Vector3 | null = null) {
+  private remember(name: string, bone: THREE.Bone, forward: THREE.Vector3, side: THREE.Vector3 | null = null) {
     const restWorld = bone.getWorldQuaternion(new THREE.Quaternion())
-    this.entries.set(bone.name, {
+    this.entries.set(name, {
       bone,
       restLocal: bone.quaternion.clone().normalize(),
       restWorld,
       forwardLocal: forward.clone().normalize(),
       sideLocal: side?.clone().normalize() ?? null,
+      hingeLocal: null,
+      curl: 0,
+      splay: 0,
     })
   }
 
   private find(name: string) {
-    const match = this.root.getObjectByName(name)
-    return match && (match as THREE.Bone).isBone ? (match as THREE.Bone) : null
+    return this.bones.get(name) ?? null
   }
 }
