@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg2://postgres:postgres@db:5432/app"
     # Comma-separated origins (Azure-friendly). JSON arrays are also accepted.
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
+    # Gloss -> Polish translation; disabled when the key is empty.
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
 
     @property
     def cors_origin_list(self) -> list[str]:

@@ -19,6 +19,8 @@ frontend/.vite
 **/.ruff_cache
 **/*.log
 **/*.ipynb
-backend/sign_language_processing/data/data_*.pth
+backend/translation/data/data_*.pth
+sign_data_collection
+dev_ui
 Thumbs.db
 .DS_Store
