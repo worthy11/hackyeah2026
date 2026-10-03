@@ -8,7 +8,7 @@
     result.translation  # "Cześć, jak się czujesz?"
     result.signs        # per sign: gloss, confidence, start_frame, end_frame
 
-Model files are expected in `data/` (git-ignored):
+Model files are in `models/`:
     classifier.pth, labels.json,
     segmenter/{config.json, model.safetensors, norm_mean.npy, norm_std.npy}
 """

@@ -34,13 +34,15 @@ curl -F "video=@clip.mp4" http://localhost:8000/api/sign-language/translate
 
 ## Setup
 
-Model files are not in git; put them in `data/`:
+Model files are in git under `models/`; nothing to download:
 
 ```
-data/
+models/
   classifier.pth, labels.json                                  # gloss classifier
   segmenter/config.json, model.safetensors, norm_mean.npy, norm_std.npy
 ```
+
+`data/` is git-ignored and only holds local training data; the service does not need it.
 
 Settings (`backend/.env` or environment):
 
@@ -48,7 +50,7 @@ Settings (`backend/.env` or environment):
 | --- | --- | --- |
 | `GEMINI_API_KEY` | empty | translation disabled when empty |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | |
-| `SIGN_CLASSIFIER_DIR` | `data/` | alternative folder with `classifier.pth` + `labels.json` |
+| `SIGN_CLASSIFIER_DIR` | `models/` | alternative folder with `classifier.pth` + `labels.json` |
 
 ## Python
 
