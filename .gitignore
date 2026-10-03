@@ -23,6 +23,7 @@ backend/translation/data/
 *.pth
 *.safetensors
 *.ipynb
+!backend/translation/models/**
 
 # Local sign language tooling (data collection, training, test UI)
 sign_data_collection/

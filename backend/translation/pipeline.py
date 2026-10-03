@@ -12,7 +12,7 @@ from .landmarks import classifier_landmarks, extract_pose
 from .segmentation import SignSegmenter, refine_segments
 from .gemini import GeminiTranslator
 
-DATA_DIR = Path(__file__).resolve().parent / "data"
+MODELS_DIR = Path(__file__).resolve().parent / "models"
 BLANK_GLOSS = "blank"
 
 
@@ -41,12 +41,12 @@ class RecognitionResult:
 
 
 class SignLanguagePipeline:
-    """Set SIGN_CLASSIFIER_DIR to load classifier.pth + labels.json from somewhere other than `data/`."""
+    """Set SIGN_CLASSIFIER_DIR to load classifier.pth + labels.json from somewhere other than `models/`."""
 
-    def __init__(self, data_dir: Path = DATA_DIR, device: str = "cpu", translator: GeminiTranslator | None = None):
+    def __init__(self, models_dir: Path = MODELS_DIR, device: str = "cpu", translator: GeminiTranslator | None = None):
         self.translator = translator
-        self.segmenter = SignSegmenter(data_dir / "segmenter", device)
-        classifier_dir = Path(os.environ.get("SIGN_CLASSIFIER_DIR", data_dir))
+        self.segmenter = SignSegmenter(models_dir / "segmenter", device)
+        classifier_dir = Path(os.environ.get("SIGN_CLASSIFIER_DIR", models_dir))
         self.classifier = GlossClassifier(classifier_dir / "classifier.pth", classifier_dir / "labels.json", device)
 
     def recognize(self, video_path: str | Path, debug: bool = False) -> RecognitionResult:
