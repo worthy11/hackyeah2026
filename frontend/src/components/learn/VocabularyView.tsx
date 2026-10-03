@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
-import { categories, gestures } from '../../data/mockLearning'
+import { categories, gestures, type Gesture } from '../../data/mockLearning'
+import { GesturePractice } from './GesturePractice'
 
 export function VocabularyView() {
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [practicing, setPracticing] = useState<Gesture | null>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   // close on outside click
@@ -35,6 +37,10 @@ export function VocabularyView() {
     : selected.size === 1
       ? categories.find(c => selected.has(c.id))?.name ?? ''
       : `${selected.size} kategorie`
+
+  if (practicing) {
+    return <GesturePractice gesture={practicing} onBack={() => setPracticing(null)} />
+  }
 
   return (
     <main className="learn-view">
@@ -82,7 +88,12 @@ export function VocabularyView() {
 
       <div className="gesture-grid">
         {visible.map(g => (
-          <div key={g.id} className="gesture-card">
+          <button
+            key={g.id}
+            className="gesture-card gesture-card--btn"
+            type="button"
+            onClick={() => setPracticing(g)}
+          >
             <div className="gesture-video-placeholder">
               {g.videoPath
                 ? <video src={g.videoPath} loop muted playsInline />
@@ -90,7 +101,7 @@ export function VocabularyView() {
               }
             </div>
             <span className="gesture-gloss">{g.gloss}</span>
-          </div>
+          </button>
         ))}
       </div>
     </main>

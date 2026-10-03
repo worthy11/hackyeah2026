@@ -1013,11 +1013,145 @@ a:focus-visible {
   }
 }
 
-/* ¦¦ Learning module ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦ */
+/* Â¦Â¦ Learning module Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ */
 
 .learn-view {
   padding: 28px 34px 48px;
   max-width: 960px;
+}
+
+/* â”€â”€ Practice view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+.practice-view {
+  max-width: 1100px;
+}
+
+.practice-header {
+  margin-bottom: 20px;
+}
+
+.practice-stage {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.practice-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.practice-pane-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.practice-avatar-wrap,
+.practice-cam-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #e8ede9;
+}
+
+.static-avatar-container {
+  width: 100%;
+  height: 100%;
+}
+
+.static-avatar-container canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.practice-cam-wrap {
+  background: #1a1f1e;
+}
+
+.practice-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scaleX(-1);
+}
+
+.practice-cam-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.practice-cam-error {
+  margin: 0;
+  color: #f87171;
+  font-size: 13px;
+}
+
+/* Score row */
+.practice-score-row {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.practice-score-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 20px 36px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  min-width: 180px;
+}
+
+.practice-score-value {
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--green);
+}
+
+.practice-score-value--empty {
+  color: var(--muted);
+  font-weight: 300;
+}
+
+.practice-score-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Clickable gesture card */
+.gesture-card--btn {
+  cursor: pointer;
+  text-align: center;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.gesture-card--btn:hover {
+  border-color: var(--green);
+  box-shadow: 0 2px 10px rgba(30, 125, 94, 0.12);
+}
+
+.gesture-card--btn:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
 }
 
 .learn-header {
@@ -1196,7 +1330,7 @@ a:focus-visible {
   letter-spacing: 0.3px;
 }
 
-/* Vocabulary view (S³ownictwo) */
+/* Vocabulary view (SÂ³ownictwo) */
 .vocabulary-toolbar {
   display: flex;
   align-items: center;
@@ -1236,7 +1370,7 @@ a:focus-visible {
 }
 
 
-/* ¦¦ Vocabulary dropdown filter ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦ */
+/* Â¦Â¦ Vocabulary dropdown filter Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ */
 
 .vocab-dropdown-wrap {
   position: relative;
@@ -1346,7 +1480,7 @@ a:focus-visible {
   transform: rotate(45deg);
 }
 
-/* ¦¦ Category tile icon ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦ */
+/* Â¦Â¦ Category tile icon Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ */
 
 .category-tile__icon {
   display: grid;
@@ -1366,7 +1500,7 @@ a:focus-visible {
   margin-bottom: 8px;
 }
 
-/* ¦¦ Learning module mobile ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦ */
+/* Â¦Â¦ Learning module mobile Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ */
 
 @media (max-width: 760px) {
   .learn-view {
@@ -1389,6 +1523,16 @@ a:focus-visible {
     flex-direction: column;
     align-items: flex-start;
     gap: 10px;
+  }
+
+  /* Practice view stacks vertically on mobile */
+  .practice-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .practice-avatar-wrap,
+  .practice-cam-wrap {
+    min-height: 240px;
   }
 }
 

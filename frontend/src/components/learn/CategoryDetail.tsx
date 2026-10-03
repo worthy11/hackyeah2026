@@ -1,11 +1,18 @@
+import { useState } from 'react'
 import { Icon } from '../Icon'
-import { gestures, phrases, gestureMap, type Category } from '../../data/mockLearning'
+import { gestures, phrases, gestureMap, type Category, type Gesture } from '../../data/mockLearning'
+import { GesturePractice } from './GesturePractice'
 
 type Props = { category: Category; onBack: () => void }
 
 export function CategoryDetail({ category, onBack }: Props) {
+  const [practicing, setPracticing] = useState<Gesture | null>(null)
   const catGestures = gestures.filter(g => g.categoryId === category.id)
   const catPhrases  = phrases.filter(p => p.categoryId  === category.id)
+
+  if (practicing) {
+    return <GesturePractice gesture={practicing} onBack={() => setPracticing(null)} />
+  }
 
   return (
     <main className="learn-view">
@@ -26,7 +33,12 @@ export function CategoryDetail({ category, onBack }: Props) {
         <h3 className="learn-section-title">Gesty ({catGestures.length})</h3>
         <div className="gesture-grid">
           {catGestures.map(g => (
-            <div key={g.id} className="gesture-card">
+            <button
+              key={g.id}
+              className="gesture-card gesture-card--btn"
+              type="button"
+              onClick={() => setPracticing(g)}
+            >
               <div className="gesture-video-placeholder">
                 {g.videoPath
                   ? <video src={g.videoPath} loop muted playsInline />
@@ -34,7 +46,7 @@ export function CategoryDetail({ category, onBack }: Props) {
                 }
               </div>
               <span className="gesture-gloss">{g.gloss}</span>
-            </div>
+            </button>
           ))}
         </div>
       </section>
