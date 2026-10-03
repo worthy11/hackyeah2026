@@ -1,6 +1,6 @@
 import { Icon } from './Icon'
 
-export function DashboardHeader() {
+export function DashboardHeader({ onHome }: { onHome?: () => void }) {
   return (
     <header className="topbar">
       <div className="greeting">

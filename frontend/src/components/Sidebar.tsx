@@ -34,7 +34,7 @@ function NavigationLinks({ activeItem, onNavigate, items }: NavigationProps & { 
 export function Sidebar({ activeItem, onNavigate }: NavigationProps) {
   return (
     <aside className="sidebar">
-      <button className="brand" onClick={() => onNavigate('Moja nauka')} type="button">
+      <button className="brand" onClick={() => onNavigate('home')} type="button">
         <span className="brand-mark"><Icon name="materials" size={23} /></span>
         <span className="brand-copy"><strong>wMig</strong><small>Ucz się w mig</small></span>
       </button>

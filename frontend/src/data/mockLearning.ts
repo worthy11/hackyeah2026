@@ -22,12 +22,13 @@ export type Phrase = {
 }
 
 export const categories: Category[] = [
-  { id: 1, name: 'Powitania',            description: 'Przywitanie i small talk',       icon: 'hand'   },
-  { id: 2, name: 'Rodzina',              description: 'Członkowie rodziny',              icon: 'people' },
-  { id: 3, name: 'Wygląd',              description: 'Opis wyglądu i cech fizycznych',  icon: 'eye'    },
-  { id: 4, name: 'Emocje',              description: 'Wyrażanie uczuć i nastrojów',     icon: 'heart'  },
-  { id: 5, name: 'Kierunki i transport', description: 'Nawigacja i środki transportu',  icon: 'map'    },
-  { id: 6, name: 'Jedzenie',            description: 'Produkty i posiłki',              icon: 'food'   },
+  { id: 1, name: 'Powitania',            description: 'Przywitanie i small talk',       icon: 'hand'       },
+  { id: 2, name: 'Rodzina',              description: 'Członkowie rodziny',              icon: 'people'     },
+  { id: 3, name: 'Wygląd',              description: 'Opis wyglądu i cech fizycznych',  icon: 'eye'        },
+  { id: 4, name: 'Emocje',              description: 'Wyrażanie uczuć i nastrojów',     icon: 'heart'      },
+  { id: 5, name: 'Kierunki i transport', description: 'Nawigacja i środki transportu',  icon: 'map'        },
+  { id: 6, name: 'Jedzenie',            description: 'Produkty i posiłki',              icon: 'food'       },
+  { id: 7, name: 'Alfabet',             description: 'Wszystkie litery polskiego alfabetu', icon: 'vocabulary' },
 ]
 
 export const gestures: Gesture[] = [
@@ -78,36 +79,70 @@ export const gestures: Gesture[] = [
   { id: 604, categoryId: 6, gloss: 'MLEKO',    videoPath: null },
   { id: 605, categoryId: 6, gloss: 'KAWA',     videoPath: null },
   { id: 606, categoryId: 6, gloss: 'HERBATA',  videoPath: null },
+
+  // Alfabet (7)
+  { id: 701, categoryId: 7, gloss: 'A',  videoPath: null },
+  { id: 702, categoryId: 7, gloss: 'Ą',  videoPath: null },
+  { id: 703, categoryId: 7, gloss: 'B',  videoPath: null },
+  { id: 704, categoryId: 7, gloss: 'C',  videoPath: null },
+  { id: 705, categoryId: 7, gloss: 'Ć',  videoPath: null },
+  { id: 706, categoryId: 7, gloss: 'D',  videoPath: null },
+  { id: 707, categoryId: 7, gloss: 'E',  videoPath: null },
+  { id: 708, categoryId: 7, gloss: 'Ę',  videoPath: null },
+  { id: 709, categoryId: 7, gloss: 'F',  videoPath: null },
+  { id: 710, categoryId: 7, gloss: 'G',  videoPath: null },
+  { id: 711, categoryId: 7, gloss: 'H',  videoPath: null },
+  { id: 712, categoryId: 7, gloss: 'I',  videoPath: null },
+  { id: 713, categoryId: 7, gloss: 'J',  videoPath: null },
+  { id: 714, categoryId: 7, gloss: 'K',  videoPath: null },
+  { id: 715, categoryId: 7, gloss: 'L',  videoPath: null },
+  { id: 716, categoryId: 7, gloss: 'Ł',  videoPath: null },
+  { id: 717, categoryId: 7, gloss: 'M',  videoPath: null },
+  { id: 718, categoryId: 7, gloss: 'N',  videoPath: null },
+  { id: 719, categoryId: 7, gloss: 'Ń',  videoPath: null },
+  { id: 720, categoryId: 7, gloss: 'O',  videoPath: null },
+  { id: 721, categoryId: 7, gloss: 'Ó',  videoPath: null },
+  { id: 722, categoryId: 7, gloss: 'P',  videoPath: null },
+  { id: 723, categoryId: 7, gloss: 'R',  videoPath: null },
+  { id: 724, categoryId: 7, gloss: 'S',  videoPath: null },
+  { id: 725, categoryId: 7, gloss: 'Ś',  videoPath: null },
+  { id: 726, categoryId: 7, gloss: 'T',  videoPath: null },
+  { id: 727, categoryId: 7, gloss: 'U',  videoPath: null },
+  { id: 728, categoryId: 7, gloss: 'W',  videoPath: null },
+  { id: 729, categoryId: 7, gloss: 'Y',  videoPath: null },
+  { id: 730, categoryId: 7, gloss: 'Z',  videoPath: null },
+  { id: 731, categoryId: 7, gloss: 'Ź',  videoPath: null },
+  { id: 732, categoryId: 7, gloss: 'Ż',  videoPath: null },
 ]
 
 export const phrases: Phrase[] = [
   // Powitania (1)
-  { id: 1001, categoryId: 1, translation: 'Cześć, jak się masz?',         gestureIds: [101, 101] },
-  { id: 1002, categoryId: 1, translation: 'Dzień dobry, dziękuję.',        gestureIds: [102, 104] },
-  { id: 1003, categoryId: 1, translation: 'Przepraszam, do widzenia.',     gestureIds: [106, 103] },
+  { id: 1001, categoryId: 1, translation: 'Hej, co słychać?',              gestureIds: [101, 101] },
+  { id: 1002, categoryId: 1, translation: 'Dzień dobry, dziękuję bardzo.', gestureIds: [102, 104] },
+  { id: 1003, categoryId: 1, translation: 'Przepraszam, muszę już iść.',   gestureIds: [106, 103] },
 
   // Rodzina (2)
-  { id: 2001, categoryId: 2, translation: 'To jest moja mama.',            gestureIds: [201] },
-  { id: 2002, categoryId: 2, translation: 'Mam siostrę i brata.',          gestureIds: [203, 204] },
-  { id: 2003, categoryId: 2, translation: 'Moja babcia i dziadek.',        gestureIds: [205, 206] },
+  { id: 2001, categoryId: 2, translation: 'To moja mama.',                 gestureIds: [201] },
+  { id: 2002, categoryId: 2, translation: 'Mam starszą siostrę i brata.',  gestureIds: [203, 204] },
+  { id: 2003, categoryId: 2, translation: 'Babcia i dziadek mieszkają razem.', gestureIds: [205, 206] },
 
   // Wygląd (3)
-  { id: 3001, categoryId: 3, translation: 'On jest wysoki i ma blond włosy.', gestureIds: [301, 305, 303] },
-  { id: 3002, categoryId: 3, translation: 'Ona ma ciemne oczy.',           gestureIds: [304] },
+  { id: 3001, categoryId: 3, translation: 'Jest wysoki i ma blond włosy.', gestureIds: [301, 305, 303] },
+  { id: 3002, categoryId: 3, translation: 'Ma piękne ciemne oczy.',        gestureIds: [304] },
 
   // Emocje (4)
-  { id: 4001, categoryId: 4, translation: 'Czuję radość i miłość.',        gestureIds: [401, 406] },
-  { id: 4002, categoryId: 4, translation: 'Jestem zaskoczony.',            gestureIds: [405] },
-  { id: 4003, categoryId: 4, translation: 'Czuję smutek i strach.',        gestureIds: [402, 404] },
+  { id: 4001, categoryId: 4, translation: 'Jestem szczęśliwy i zakochany.', gestureIds: [401, 406] },
+  { id: 4002, categoryId: 4, translation: 'Wow, tego się nie spodziewałem!', gestureIds: [405] },
+  { id: 4003, categoryId: 4, translation: 'Smutno mi i trochę się boję.',  gestureIds: [402, 404] },
 
   // Kierunki (5)
-  { id: 5001, categoryId: 5, translation: 'Skręć w lewo, potem w prawo.', gestureIds: [501, 502] },
-  { id: 5002, categoryId: 5, translation: 'Jedź prosto autobusem.',        gestureIds: [503, 504] },
+  { id: 5001, categoryId: 5, translation: 'Skręć w lewo, a potem w prawo.', gestureIds: [501, 502] },
+  { id: 5002, categoryId: 5, translation: 'Jedź prosto, wsiądź w autobus.', gestureIds: [503, 504] },
 
   // Jedzenie (6)
   { id: 6001, categoryId: 6, translation: 'Poproszę chleb i wodę.',        gestureIds: [601, 602] },
-  { id: 6002, categoryId: 6, translation: 'Chcę kawę lub herbatę.',        gestureIds: [605, 606] },
-  { id: 6003, categoryId: 6, translation: 'Mam jabłko i mleko.',           gestureIds: [603, 604] },
+  { id: 6002, categoryId: 6, translation: 'Napiję się kawy albo herbaty.', gestureIds: [605, 606] },
+  { id: 6003, categoryId: 6, translation: 'Wezmę jabłko i mleko.',         gestureIds: [603, 604] },
 ]
 
 // helpers

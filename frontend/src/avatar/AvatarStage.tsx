@@ -387,6 +387,7 @@ export default function AvatarStage() {
     let lastTimestamp = -1
     let lastFrame = performance.now()
 
+    let debugFrame = 0
     const loop = (now: number) => {
       raf = requestAnimationFrame(loop)
       const dt = Math.min(0.05, Math.max(0.001, (now - lastFrame) / 1000))
@@ -413,9 +414,20 @@ export default function AvatarStage() {
           }
           if (smoothed.left || smoothed.right || smoothed.head) rig.apply(smoothed, dt)
           applyBlendshapes(morphMap, faceResult.faceBlendshapes ?? [])
-        } catch {
+          // Debug: log once per 180 frames (~3s) to show tracking state
+          if (++debugFrame % 180 === 1) {
+            console.debug('[AvatarStage] pose lms:', pose.worldLandmarks?.[0]?.length ?? 0,
+              '| hands:', hands.landmarks?.length ?? 0,
+              '| face bs:', faceResult.faceBlendshapes?.length ?? 0,
+              '| smoothed L:', !!smoothed.left, 'R:', !!smoothed.right, 'H:', !!smoothed.head)
+          }
+        } catch (err) {
           // A skipped video frame can repeat a timestamp. The next frame recovers.
+          if (++debugFrame % 60 === 1) console.warn('[AvatarStage] loop error:', err)
         }
+      } else if (++debugFrame % 300 === 1) {
+        console.debug('[AvatarStage] idle — rig:', !!rig, 'trackers:', !!trackers,
+          'readyState:', video.readyState, 'videoWidth:', video.videoWidth)
       }
       renderer.render(scene, camera)
     }
