@@ -1,0 +1,59 @@
+:root {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  line-height: 1.5;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+.app {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+}
+
+h1 {
+  margin: 0 0 0.75rem;
+  font-size: 2.5rem;
+  letter-spacing: -0.03em;
+}
+
+.status {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #e2e8f0;
+}
+
+.status--ok {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status--error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status--loading {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.hint {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+}
