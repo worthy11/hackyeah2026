@@ -53,15 +53,16 @@ if ($LASTEXITCODE -ne 0) { throw "ACR login failed" }
 if (-not $SkipBuild) {
     $ApiFqdn = az containerapp show -n $ApiApp -g $ResourceGroup --query properties.configuration.ingress.fqdn -o tsv
     if (-not $ApiFqdn) { throw "Could not resolve API FQDN for '$ApiApp'" }
-    $ViteApiUrl = "https://$ApiFqdn"
 
     Write-Host "==> Building API image ($ApiImage)..."
     docker build -f backend/docker/Dockerfile -t $ApiImage -t $ApiLatest .
     if ($LASTEXITCODE -ne 0) { throw "API image build failed" }
 
-    Write-Host "==> Building web image ($WebImage) with VITE_API_URL=$ViteApiUrl ..."
+    Write-Host "==> Building web image ($WebImage) proxying to https://$ApiFqdn ..."
     docker build -f backend/docker/Dockerfile.frontend `
-        --build-arg "VITE_API_URL=$ViteApiUrl" `
+        --build-arg "VITE_API_URL=" `
+        --build-arg "API_UPSTREAM=https://$ApiFqdn" `
+        --build-arg "API_HOST=$ApiFqdn" `
         -t $WebImage `
         -t $WebLatest .
     if ($LASTEXITCODE -ne 0) { throw "Web image build failed" }

@@ -55,36 +55,49 @@ def extract_pose(video_path: str | Path) -> Pose:
       - model_complexity=0 (~2–3× faster)
       - resizing so the long side ≤ MAX_SIDE
       - keeping at most TARGET_FPS frames (classifier trains near 15 fps)
+      - stride+resize while reading (full-res buffers OOM 1Gi boxes on phone uploads)
     """
     # NOTE: for partial/live WebM chunks ffmpeg may log "File ended prematurely".
     # This is harmless — cv2 still decodes all frames written so far.
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         raise ValueError("Cannot open video")
-    src_fps = cap.get(cv2.CAP_PROP_FPS)
-    frames_rgb: list[np.ndarray] = []
-    timestamps_ms: list[float] = []
+
+    reported_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+    src_fps = reported_fps if 0 < reported_fps <= MAX_PLAUSIBLE_FPS else 25.0
+    stride = max(1, round(src_fps / TARGET_FPS))
+    max_frames = int(os.environ.get("SIGN_EXTRACT_MAX_FRAMES", "450"))  # ~30s @ 15fps
+
+    kept: list[np.ndarray] = []
+    idx = 0
+    first_ts: float | None = None
+    last_ts: float | None = None
     while True:
         ok, frame = cap.read()
         if not ok:
             break
-        frames_rgb.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        timestamps_ms.append(cap.get(cv2.CAP_PROP_POS_MSEC))
+        ts = float(cap.get(cv2.CAP_PROP_POS_MSEC) or 0.0)
+        if first_ts is None:
+            first_ts = ts
+        last_ts = ts
+        if idx % stride == 0:
+            kept.append(_resize(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB), MAX_SIDE))
+            if len(kept) >= max_frames:
+                break
+        idx += 1
     cap.release()
-    if not frames_rgb:
+
+    if not kept:
         raise ValueError("No frames could be read from the video")
 
-    # Browser-recorded webm files often report a bogus fps.
-    if not 0 < src_fps <= MAX_PLAUSIBLE_FPS:
-        duration_ms = timestamps_ms[-1] - timestamps_ms[0]
-        src_fps = (len(frames_rgb) - 1) * 1000 / duration_ms if duration_ms > 0 else 25.0
+    # Browser-recorded webm files often report a bogus fps — recompute from timestamps.
+    if not 0 < reported_fps <= MAX_PLAUSIBLE_FPS and first_ts is not None and last_ts is not None:
+        duration_ms = last_ts - first_ts
+        if duration_ms > 0 and idx > 1:
+            src_fps = (idx - 1) * 1000 / duration_ms
+            stride = max(1, round(src_fps / TARGET_FPS))
 
-    # Keep ~TARGET_FPS — fewer Holistic calls, still enough for the LSTM.
-    stride = max(1, round(src_fps / TARGET_FPS))
-    kept = frames_rgb[::stride]
-    out_fps = src_fps / stride
-
-    kept = [_resize(f, MAX_SIDE) for f in kept]
+    out_fps = src_fps / max(1, stride)
     height, width = kept[0].shape[:2]
 
     return load_holistic(

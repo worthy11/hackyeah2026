@@ -38,9 +38,11 @@ async def lifespan(_app: FastAPI):
         pipeline = get_pipeline()
         warm_holistic()
         log.info(
-            "ML pipeline ready  weights=%s  labels=%s",
+            "ML pipeline ready  weights=%s  labels=%s  gemini=%s  key_len=%d",
             getattr(pipeline, "classifier_weights", "?"),
             getattr(pipeline, "classifier_labels", "?"),
+            "on" if pipeline.translator else "off",
+            len(settings.GEMINI_API_KEY or ""),
         )
     except Exception as exc:  # noqa: BLE001
         log.warning("ML warm-up skipped: %s", exc)
@@ -78,5 +80,16 @@ app.mount("/media", StaticFiles(directory=str(_media)), name="media")
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    gemini = bool(settings.GEMINI_API_KEY)
+    translator_on = False
+    try:
+        from app.api.sign_language import get_pipeline
+        translator_on = get_pipeline().translator is not None
+    except Exception:  # noqa: BLE001
+        translator_on = False
+    return {
+        "status": "ok",
+        "gemini_key": gemini,
+        "gemini_translator": translator_on,
+    }

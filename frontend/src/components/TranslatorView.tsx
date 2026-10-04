@@ -22,9 +22,10 @@ type TranslationResult = {
 
 type Mode = 'upload' | 'record'
 type Status = 'idle' | 'recording' | 'processing' | 'done' | 'error'
-type Stage = 'extracting' | 'segmenting' | 'classifying' | 'translating' | null
+type Stage = 'uploading' | 'extracting' | 'segmenting' | 'classifying' | 'translating' | null
 
 const STAGE_LABEL: Record<Exclude<Stage, null>, string> = {
+  uploading:   'Wysyłanie wideo…',
   extracting:  'Wyodrębnianie punktów…',
   segmenting:  'Segmentacja gestów…',
   classifying: 'Rozpoznawanie gestów…',
@@ -99,11 +100,18 @@ export function TranslatorView() {
   }
 
   // ── WebSocket submit (upload + record fallback) ───────────────────────────
-  const WS_UPLOAD_CHUNK = 256 * 1024
+  const WS_UPLOAD_CHUNK = 512 * 1024
+  const MAX_UPLOAD_BYTES = 40 * 1024 * 1024
 
   function submitViaWs(blob: Blob, filename?: string) {
+    if (blob.size > MAX_UPLOAD_BYTES) {
+      setErrorMsg(`Plik jest za duży (${(blob.size / 1e6).toFixed(1)} MB). Maks. 40 MB — skróć nagranie.`)
+      setStatus('error')
+      return
+    }
+
     setStatus('processing')
-    setStage('extracting')
+    setStage('uploading')
     setErrorMsg(null)
     setLiveGlosses([])
     setLiveTranslation('')

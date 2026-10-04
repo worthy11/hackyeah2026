@@ -16,7 +16,6 @@ export function ContributionView() {
   const [file, setFile]             = useState<File | null>(null)
   const [status, setStatus]         = useState<Status>('idle')
   const [error, setError]           = useState<string | null>(null)
-  const [result, setResult]         = useState<unknown | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // Phrase segment markers
@@ -81,7 +80,7 @@ export function ContributionView() {
         const d = await res.json().catch(() => ({}))
         throw new Error(d?.detail ?? `HTTP ${res.status}`)
       }
-      setResult(await res.json())
+      await res.json()
       setStatus('done')
       invalidateGestureCache()
     } catch (e) {
@@ -91,7 +90,7 @@ export function ContributionView() {
   }
 
   function reset() {
-    setFile(null); setStatus('idle'); setResult(null); setError(null)
+    setFile(null); setStatus('idle'); setError(null)
     setGloss(''); setTranslation(''); setSegments([]); setMarkerStart(null); setPendingGloss('')
   }
 

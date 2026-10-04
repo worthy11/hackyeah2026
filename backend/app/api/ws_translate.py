@@ -124,7 +124,10 @@ async def ws_translate(websocket: WebSocket) -> None:  # noqa: C901
             if "bytes" in message and message["bytes"] is not None:
                 chunk = message["bytes"]
                 accumulated.append(chunk)
-                log.info("ws chunk +%d B  total=%d B", len(chunk), sum(map(len, accumulated)))
+                total = sum(map(len, accumulated))
+                # Avoid log spam on large phone uploads (37MB ≈ 140 lines otherwise).
+                if len(accumulated) == 1 or len(accumulated) % 20 == 0:
+                    log.info("ws chunk #%d  total=%d B", len(accumulated), total)
 
             elif "text" in message and message["text"] is not None:
                 data = json.loads(message["text"])
@@ -225,6 +228,8 @@ async def ws_translate(websocket: WebSocket) -> None:  # noqa: C901
                         translation = await _stream_gemini(
                             websocket, loop, pipeline.translator, all_glosses
                         )
+                    elif not pipeline.translator:
+                        log.warning("Gemini translator disabled (GEMINI_API_KEY missing/empty)")
                     translate_s = time.perf_counter() - t3
 
                     timings = {
@@ -234,9 +239,10 @@ async def ws_translate(websocket: WebSocket) -> None:  # noqa: C901
                         "translate_s": round(translate_s, 3),
                     }
                     log.info(
-                        "timing translate=%.2fs  total_ml=%.2fs",
+                        "timing translate=%.2fs  total_ml=%.2fs  translation=%s",
                         translate_s,
-                        extract_s + segment_s + classify_s,
+                        extract_s + segment_s + classify_s + translate_s,
+                        "yes" if translation else "no",
                     )
 
                     await websocket.send_json({"type": "timing", **timings})

@@ -51,24 +51,25 @@ export function GestureVideoPlayer({
     const startSec = start_ms / 1000
     const endSec = end_ms == null ? null : end_ms / 1000
 
+    const video = el
     const seekToStart = () => {
-      if (Math.abs(el.currentTime - startSec) > 0.05) el.currentTime = startSec
+      if (Math.abs(video.currentTime - startSec) > 0.05) video.currentTime = startSec
     }
     seekToStart()
 
     function onTimeUpdate() {
       if (endSec == null) return
-      if (el.currentTime >= endSec) {
+      if (video.currentTime >= endSec) {
         if (loop) seekToStart()
-        else el.pause()
+        else video.pause()
       }
     }
 
-    el.addEventListener('timeupdate', onTimeUpdate)
-    el.addEventListener('loadedmetadata', seekToStart)
+    video.addEventListener('timeupdate', onTimeUpdate)
+    video.addEventListener('loadedmetadata', seekToStart)
     return () => {
-      el.removeEventListener('timeupdate', onTimeUpdate)
-      el.removeEventListener('loadedmetadata', seekToStart)
+      video.removeEventListener('timeupdate', onTimeUpdate)
+      video.removeEventListener('loadedmetadata', seekToStart)
     }
   }, [start_ms, end_ms, loop, video.video_url])
 
