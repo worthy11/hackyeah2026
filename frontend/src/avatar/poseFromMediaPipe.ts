@@ -166,3 +166,31 @@ export function toBodyPose(
 
   return body
 }
+
+/** Serialize one live MediaPipe frame (same trackers as the mirror) for later replay. */
+export function frameFromMediaPipe(
+  pose: { landmarks?: MpPoint[][]; worldLandmarks?: MpPoint[][] },
+  hands: HandResult,
+  handSides: Array<Side | null>,
+): SignLandmarkFrame | null {
+  const world = pose.worldLandmarks?.[0]
+  const image = pose.landmarks?.[0]
+  if (!world?.length || !image?.length) return null
+
+  let leftHandWorld: number[][] | null = null
+  let rightHandWorld: number[][] | null = null
+  hands.worldLandmarks?.forEach((lms, index) => {
+    const side = handSides[index]
+    if (!side || lms.length < 21) return
+    const rows = lms.map((p) => [p.x, p.y, p.z])
+    if (side === 'Left') leftHandWorld = rows
+    else rightHandWorld = rows
+  })
+
+  return {
+    poseWorld: world.map((p) => [p.x, p.y, p.z]),
+    poseImage: image.map((p) => [p.x, p.y, p.z, p.visibility ?? 1]),
+    leftHandWorld,
+    rightHandWorld,
+  }
+}

@@ -2,7 +2,7 @@
  * ConversationAvatar — idle / live-mirror / landmark-replay for Rozmowy.
  */
 
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useEffect, useImperativeHandle, useRef, useState, forwardRef, type RefObject } from 'react'
 import {
   FilesetResolver,
   HandLandmarker,
@@ -11,13 +11,22 @@ import {
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { ArmFilter, HeadFilter } from './filters'
-import { AvatarRig, type BodyPose } from './rig'
+import { AvatarRig, type ArmPose, type BodyPose, type HeadPose, type Vec3 } from './rig'
 import {
   assignHands,
   bodyPoseFromFrame,
+  frameFromMediaPipe,
   toBodyPose,
   type SignLandmarkClip,
+  type SignLandmarkFrame,
 } from './poseFromMediaPipe'
+import {
+  applyScriptedHello,
+  captureScriptedArmBases,
+  SCRIPTED_HELLO_DURATION_S,
+  type ScriptedArmBases,
+  type ScriptedArmBones,
+} from './scriptedHello'
 
 const AVATAR_URL = '/avatar_2_blendshapes.glb'
 const WASM_URL = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm'
@@ -109,12 +118,60 @@ function breathe(t: number, freq: number, phase = 0) {
   return Math.sin(t * freq + phase)
 }
 
+type HoldState = { arm: number; hand: number; jump: number }
+
+const ARM_HOLD_FRAMES = 6
+const HAND_HOLD_FRAMES = 8
+const JUMP_HOLD_FRAMES = 4
+const JUMP_DISTANCE = 0.3
+
+function distance(a: Vec3, b: Vec3) {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+}
+
+/** Rides out short dropouts and single-frame landmark jumps instead of snapping the arm. */
+function holdArm(next: ArmPose | null, previous: ArmPose | null, state: HoldState): ArmPose | null {
+  if (!next) {
+    state.arm += 1
+    return previous && state.arm <= ARM_HOLD_FRAMES ? previous : null
+  }
+  state.arm = 0
+
+  if (
+    previous &&
+    (distance(next.wrist, previous.wrist) > JUMP_DISTANCE ||
+      distance(next.elbow, previous.elbow) > JUMP_DISTANCE)
+  ) {
+    state.jump += 1
+    if (state.jump <= JUMP_HOLD_FRAMES) return previous
+  }
+  state.jump = 0
+
+  if (next.hand) {
+    state.hand = 0
+    return next
+  }
+  state.hand += 1
+  if (previous?.hand && state.hand <= HAND_HOLD_FRAMES) return { ...next, hand: previous.hand }
+  return next
+}
+
+function holdHead(next: HeadPose | null, previous: HeadPose | null, missed: number) {
+  if (next) return { head: next, missed: 0 }
+  if (previous && missed < 6) return { head: previous, missed: missed + 1 }
+  return { head: null, missed: missed + 1 }
+}
+
 type Props = {
   signing?: boolean
   /** Prefer this: drive avatar with the same MP+mirror path as the live studio. */
   signVideoUrl?: string | null
   /** Fallback: precomputed Holistic JSON (may not match studio mirroring). */
   landmarksUrl?: string | null
+  /** Hardcoded keypoint choreography (conversation demo). */
+  scriptedSign?: 'hello' | null
+  /** Load MediaPipe trackers (needed for live mirror / sign-video). Off for scripted chat. */
+  loadTrackers?: boolean
   durationMs?: number
   onSigningDone?: () => void
   /** Live selfie video — avatar mirrors it when liveTracking is true. */
@@ -124,22 +181,43 @@ type Props = {
   playbackRate?: number
 }
 
+export type ConversationAvatarHandle = {
+  startLandmarkCapture: () => void
+  stopLandmarkCapture: () => SignLandmarkClip | null
+}
+
 type ReplayState = {
   clip: SignLandmarkClip
   index: number
   accum: number
 } | null
 
-export function ConversationAvatar({
+type ScriptedState = {
+  id: 'hello'
+  t: number
+  bones: ScriptedArmBones
+  bases: ScriptedArmBases
+} | null
+
+type CaptureBuf = {
+  active: boolean
+  frames: SignLandmarkFrame[]
+  t0: number
+  tLast: number
+}
+
+export const ConversationAvatar = forwardRef<ConversationAvatarHandle, Props>(function ConversationAvatar({
   signing = false,
   signVideoUrl = null,
   landmarksUrl = null,
+  scriptedSign = null,
+  loadTrackers = true,
   durationMs = 2500,
   onSigningDone,
   liveVideoRef,
   liveTracking = false,
   playbackRate = 1.5,
-}: Props) {
+}, ref) {
   const containerRef = useRef<HTMLDivElement>(null)
   const signVideoRef = useRef<HTMLVideoElement>(null)
   const onDoneRef = useRef(onSigningDone)
@@ -148,16 +226,38 @@ export function ConversationAvatar({
   const liveVideoPropRef = useRef(liveVideoRef)
   const playbackRateRef = useRef(playbackRate)
   const signVideoDrivingRef = useRef(false)
+  const trackersReadyRef = useRef(false)
   const replayRef = useRef<ReplayState>(null)
+  const scriptedRef = useRef<ScriptedState>(null)
+  const scriptedBonesRef = useRef<ScriptedArmBones | null>(null)
+  const scriptedBasesRef = useRef<ScriptedArmBases | null>(null)
   const restoreIdleRef = useRef<(() => void) | null>(null)
   const clipCache = useRef(new Map<string, SignLandmarkClip>())
+  const captureRef = useRef<CaptureBuf>({ active: false, frames: [], t0: 0, tLast: 0 })
   const [loading, setLoading] = useState(true)
+
+  useImperativeHandle(ref, () => ({
+    startLandmarkCapture: () => {
+      captureRef.current = { active: true, frames: [], t0: 0, tLast: 0 }
+    },
+    stopLandmarkCapture: () => {
+      const buf = captureRef.current
+      buf.active = false
+      if (buf.frames.length < 2) return null
+      const elapsed = Math.max(1, buf.tLast - buf.t0) / 1000
+      const fps = Math.min(60, Math.max(8, buf.frames.length / elapsed))
+      return { fps, frames: buf.frames }
+    },
+  }))
 
   useEffect(() => { onDoneRef.current = onSigningDone }, [onSigningDone])
   useEffect(() => { signingRef.current = signing }, [signing])
   useEffect(() => { liveTrackingRef.current = liveTracking }, [liveTracking])
   useEffect(() => { liveVideoPropRef.current = liveVideoRef }, [liveVideoRef])
   useEffect(() => { playbackRateRef.current = playbackRate }, [playbackRate])
+
+  const loadTrackersRef = useRef(loadTrackers)
+  useEffect(() => { loadTrackersRef.current = loadTrackers }, [loadTrackers])
 
   useEffect(() => {
     const container = containerRef.current
@@ -167,6 +267,7 @@ export function ConversationAvatar({
     let raf = 0
     let trackers: Trackers | null = null
     let lastTimestamp = -1
+    trackersReadyRef.current = false
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.outputColorSpace = THREE.SRGBColorSpace
@@ -210,6 +311,9 @@ export function ConversationAvatar({
     const leftFilter = new ArmFilter()
     const rightFilter = new ArmFilter()
     const headFilter = new HeadFilter()
+    const leftHold: HoldState = { arm: 0, hand: 0, jump: 0 }
+    const rightHold: HoldState = { arm: 0, hand: 0, jump: 0 }
+    let headMiss = 0
     let smoothed: BodyPose = { left: null, right: null, head: null }
 
     let blinkTimer = 2.5 + Math.random() * 2
@@ -227,22 +331,54 @@ export function ConversationAvatar({
       leftFilter.filter(null, 1 / 60)
       rightFilter.filter(null, 1 / 60)
       headFilter.filter(null, 1 / 60)
+      leftHold.arm = leftHold.hand = leftHold.jump = 0
+      rightHold.arm = rightHold.hand = rightHold.jump = 0
+      headMiss = 0
       smoothed = { left: null, right: null, head: null }
+
+      const leftArmBone = leftArm || findBone(rootScene, 'LeftArm')
+      const rightArmBone = rightArm || findBone(rootScene, 'RightArm')
+      const leftFore = findBoneExact(rootScene, 'LeftForeArm') || findBone(rootScene, 'LeftForeArm')
+      const rightFore = findBoneExact(rootScene, 'RightForeArm') || findBone(rootScene, 'RightForeArm')
+      const rightHand = findBoneExact(rootScene, 'RightHand') || findBone(rootScene, 'RightHand')
+      if (leftArmBone && rightArmBone && leftFore && rightFore) {
+        leftArm = leftArmBone
+        rightArm = rightArmBone
+        const bones: ScriptedArmBones = {
+          rightArm: rightArmBone,
+          rightFore,
+          rightHand,
+          leftArm: leftArmBone,
+          leftFore,
+        }
+        scriptedBonesRef.current = bones
+        scriptedBasesRef.current = captureScriptedArmBases(bones)
+      }
     }
     restoreIdleRef.current = captureIdleBases
 
     const finishReplay = () => {
       replayRef.current = null
+      scriptedRef.current = null
       captureIdleBases()
       onDoneRef.current?.()
     }
 
-    const applyBody = (body: BodyPose, dt: number) => {
+    const applyBody = (body: BodyPose, dt: number, soft = true) => {
       if (!rig) return
-      smoothed = {
-        left: leftFilter.filter(body.left, dt),
-        right: rightFilter.filter(body.right, dt),
-        head: headFilter.filter(body.head, dt),
+      if (soft) {
+        smoothed = {
+          left: leftFilter.filter(body.left, dt),
+          right: rightFilter.filter(body.right, dt),
+          head: headFilter.filter(body.head, dt),
+        }
+      } else {
+        // Scripted poses are already smooth — light filter only
+        smoothed = {
+          left: leftFilter.filter(body.left, dt * 1.8),
+          right: rightFilter.filter(body.right, dt * 1.8),
+          head: headFilter.filter(body.head, dt * 1.8),
+        }
       }
       if (smoothed.left || smoothed.right || smoothed.head) rig.apply(smoothed, dt)
     }
@@ -258,8 +394,10 @@ export function ConversationAvatar({
         return
       }
 
+      const scripted = scriptedRef.current
+      const playingScript = signingRef.current && !!scripted && !!rig
       const replay = replayRef.current
-      const replayingJson = signingRef.current && !!replay && !!rig && !signVideoDrivingRef.current
+      const replayingJson = signingRef.current && !!replay && !!rig && !signVideoDrivingRef.current && !playingScript
       const signVideo = signVideoRef.current
       const drivingSignVideo =
         signingRef.current &&
@@ -273,6 +411,7 @@ export function ConversationAvatar({
         signVideo.videoWidth > 0
       const liveVideo = liveVideoPropRef.current?.current ?? null
       const mirroring =
+        !playingScript &&
         !replayingJson &&
         !drivingSignVideo &&
         liveTrackingRef.current &&
@@ -292,14 +431,40 @@ export function ConversationAvatar({
           const pose = trackers!.pose.detectForVideo(video, timestamp)
           const hands = trackers!.hands.detectForVideo(video, timestamp)
           const handSides = assignHands(pose.landmarks?.[0], hands)
-          // Same selfie-mirror mapping as the live studio.
-          applyBody(toBodyPose(pose, hands, handSides, true), dt)
+          const capture = captureRef.current
+          if (capture.active) {
+            const frame = frameFromMediaPipe(pose, hands, handSides)
+            if (frame) {
+              if (!capture.t0) capture.t0 = nowMs
+              capture.tLast = nowMs
+              capture.frames.push(frame)
+            }
+          }
+          const body = toBodyPose(pose, hands, handSides, true)
+          const left = holdArm(body.left, smoothed.left, leftHold)
+          const right = holdArm(body.right, smoothed.right, rightHold)
+          const heldHead = holdHead(body.head, smoothed.head, headMiss)
+          headMiss = heldHead.missed
+          applyBody({ left, right, head: heldHead.head }, dt)
         } catch {
           // duplicate timestamp — ignore
         }
       }
 
-      if (drivingSignVideo && signVideo) {
+      if (playingScript && scripted) {
+        rootScene.rotation.y = 0
+        rootScene.rotation.z = 0
+        // Keep torso idle — only the arms animate.
+        if (headBone) headBone.rotation.set(0, 0, 0)
+        if (neckBone) neckBone.rotation.set(0, 0, 0)
+        const rate = Math.max(0.1, playbackRateRef.current)
+        scripted.t += dt * rate
+        if (scripted.t >= SCRIPTED_HELLO_DURATION_S) {
+          finishReplay()
+        } else {
+          applyScriptedHello(scripted.bones, scripted.bases, scripted.t)
+        }
+      } else if (drivingSignVideo && signVideo) {
         driveFromVideo(signVideo)
       } else if (replayingJson && replay && rig) {
         rootScene.rotation.y = 0
@@ -314,8 +479,14 @@ export function ConversationAvatar({
         if (replay.index >= replay.clip.frames.length) {
           finishReplay()
         } else {
-          // Selfie samples need the same mirror flag as live tracking.
-          applyBody(bodyPoseFromFrame(replay.clip.frames[replay.index], true), dt)
+          // Replay captured keypoints exactly — no jump-hold (that freezes real signing motion).
+          const pose = bodyPoseFromFrame(replay.clip.frames[replay.index], true)
+          smoothed = {
+            left: leftFilter.filter(pose.left, dt * 2.2),
+            right: rightFilter.filter(pose.right, dt * 2.2),
+            head: headFilter.filter(pose.head, dt * 2.2),
+          }
+          if (smoothed.left || smoothed.right || smoothed.head) rig.apply(smoothed, dt)
         }
       } else if (mirroring && liveVideo) {
         driveFromVideo(liveVideo)
@@ -396,6 +567,12 @@ export function ConversationAvatar({
         neckBone = findBone(gltf.scene, 'Neck')
         captureIdleBases()
 
+        // Start rendering immediately so scripted signs don't wait on MediaPipe.
+        setLoading(false)
+        raf = requestAnimationFrame(tick)
+
+        if (!loadTrackersRef.current) return
+
         const vision = await FilesetResolver.forVisionTasks(WASM_URL)
         if (cancelled) return
         const create = async (delegate: 'GPU' | 'CPU') => {
@@ -425,8 +602,7 @@ export function ConversationAvatar({
           return
         }
 
-        setLoading(false)
-        raf = requestAnimationFrame(tick)
+        trackersReadyRef.current = true
       } catch {
         if (!cancelled) setLoading(false)
       }
@@ -434,6 +610,7 @@ export function ConversationAvatar({
 
     return () => {
       cancelled = true
+      trackersReadyRef.current = false
       cancelAnimationFrame(raf)
       obs.disconnect()
       trackers?.pose.close()
@@ -444,68 +621,173 @@ export function ConversationAvatar({
     }
   }, [])
 
+  // Preload sample so MediaPipe can grab frames as soon as signing starts.
+  useEffect(() => {
+    const el = signVideoRef.current
+    if (!el || !signVideoUrl) return
+    if (el.getAttribute('src') === signVideoUrl) return
+    el.src = signVideoUrl
+    el.muted = true
+    el.playsInline = true
+    el.preload = 'auto'
+    el.load()
+  }, [signVideoUrl])
+
   useEffect(() => {
     let cancelled = false
     const el = signVideoRef.current
 
     if (!signing) {
       replayRef.current = null
+      scriptedRef.current = null
       signVideoDrivingRef.current = false
       if (el) {
         el.pause()
-        el.removeAttribute('src')
-        el.load()
+        el.currentTime = 0
       }
       if (!liveTracking) restoreIdleRef.current?.()
       return
     }
 
-    // Prefer the recorded webm through the same MP pipeline as live mirror.
-    if (signVideoUrl && el) {
-      let finished = false
-      const finish = () => {
-        if (finished) return
-        finished = true
-        signVideoDrivingRef.current = false
-        el.pause()
-        restoreIdleRef.current?.()
-        onDoneRef.current?.()
-      }
-      el.src = signVideoUrl
-      el.playbackRate = Math.max(0.1, playbackRate)
-      el.currentTime = 0
-      el.addEventListener('ended', finish)
-      signVideoDrivingRef.current = true
-      void el.play().catch(() => finish())
-      return () => {
-        cancelled = true
-        el.removeEventListener('ended', finish)
-        signVideoDrivingRef.current = false
-        el.pause()
-      }
+    const finish = () => {
+      if (cancelled) return
+      signVideoDrivingRef.current = false
+      replayRef.current = null
+      scriptedRef.current = null
+      if (el) el.pause()
+      restoreIdleRef.current?.()
+      onDoneRef.current?.()
     }
 
-    if (!landmarksUrl) {
-      const id = setTimeout(() => onDoneRef.current?.(), durationMs)
-      return () => clearTimeout(id)
-    }
-
-    void (async () => {
+    const startLandmarks = async (url: string) => {
       try {
-        let clip = clipCache.current.get(landmarksUrl)
+        let clip = clipCache.current.get(url)
         if (!clip) {
-          const res = await fetch(landmarksUrl)
+          const res = await fetch(url)
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
           clip = (await res.json()) as SignLandmarkClip
-          clipCache.current.set(landmarksUrl, clip)
+          clipCache.current.set(url, clip)
         }
-        if (!cancelled) replayRef.current = { clip, index: 0, accum: 0 }
+        if (cancelled) return
+        signVideoDrivingRef.current = false
+        replayRef.current = { clip, index: 0, accum: 0 }
       } catch {
-        if (!cancelled) onDoneRef.current?.()
+        if (!cancelled) finish()
       }
+    }
+
+    // Same path as live selfie mirroring: video → MediaPipe → toBodyPose(mirror).
+    const startSignVideo = async (url: string) => {
+      if (!el) {
+        if (landmarksUrl) await startLandmarks(landmarksUrl)
+        else finish()
+        return
+      }
+      for (let i = 0; i < 120 && !trackersReadyRef.current && !cancelled; i++) {
+        await new Promise(r => setTimeout(r, 50))
+      }
+      if (cancelled) return
+      if (!trackersReadyRef.current) {
+        if (landmarksUrl) await startLandmarks(landmarksUrl)
+        else finish()
+        return
+      }
+
+      let finished = false
+      const onEnded = () => {
+        if (finished || cancelled) return
+        finished = true
+        finish()
+      }
+
+      el.src = url
+      el.muted = true
+      el.playsInline = true
+      el.playbackRate = Math.max(0.1, playbackRate)
+      el.addEventListener('ended', onEnded)
+
+      try {
+        if (el.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+          await new Promise<void>((resolve, reject) => {
+            const ok = () => { el.removeEventListener('error', bad); resolve() }
+            const bad = () => { el.removeEventListener('loadeddata', ok); reject(new Error('load')) }
+            el.addEventListener('loadeddata', ok, { once: true })
+            el.addEventListener('error', bad, { once: true })
+            el.load()
+          })
+        }
+        el.currentTime = 0
+        signVideoDrivingRef.current = true
+        await el.play()
+      } catch {
+        el.removeEventListener('ended', onEnded)
+        signVideoDrivingRef.current = false
+        if (landmarksUrl) await startLandmarks(landmarksUrl)
+        else finish()
+        return
+      }
+
+      return () => {
+        el.removeEventListener('ended', onEnded)
+      }
+    }
+
+    // Hardcoded fallback only when no sample video / landmarks.
+    if (!signVideoUrl && !landmarksUrl && scriptedSign === 'hello') {
+      const start = () => {
+        restoreIdleRef.current?.()
+        const bones = scriptedBonesRef.current
+        const bases = scriptedBasesRef.current
+        if (!bones || !bases) return false
+        scriptedRef.current = { id: 'hello', t: 0, bones, bases }
+        return true
+      }
+      if (start()) {
+        return () => {
+          cancelled = true
+          scriptedRef.current = null
+        }
+      }
+      const id = window.setInterval(() => {
+        if (cancelled) {
+          window.clearInterval(id)
+          return
+        }
+        if (start()) window.clearInterval(id)
+      }, 50)
+      return () => {
+        cancelled = true
+        window.clearInterval(id)
+        scriptedRef.current = null
+      }
+    }
+
+    let nestedCleanup: (() => void) | void
+
+    void (async () => {
+      // Prefer precomputed keypoints (captured during live mirror) over re-running MP on video.
+      if (landmarksUrl) {
+        await startLandmarks(landmarksUrl)
+        return
+      }
+      if (signVideoUrl) {
+        nestedCleanup = await startSignVideo(signVideoUrl)
+        return
+      }
+      const id = setTimeout(() => finish(), durationMs)
+      nestedCleanup = () => clearTimeout(id)
     })()
-    return () => { cancelled = true }
-  }, [signing, signVideoUrl, landmarksUrl, durationMs, liveTracking, playbackRate])
+
+    return () => {
+      cancelled = true
+      nestedCleanup?.()
+      signVideoDrivingRef.current = false
+      replayRef.current = null
+      if (el) {
+        el.pause()
+      }
+    }
+  }, [signing, signVideoUrl, landmarksUrl, scriptedSign, durationMs, liveTracking, playbackRate])
 
   return (
     <div className="conversation-avatar-wrap">
@@ -525,4 +807,4 @@ export function ConversationAvatar({
       )}
     </div>
   )
-}
+})

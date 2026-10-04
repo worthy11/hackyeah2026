@@ -18,8 +18,8 @@ const DEMO_GRADES: Record<string, GradeResult> = {
     score: 100,
   },
   'CZEŚĆ': {
-    glosses: ['CZEŚĆ'],
-    translation: null,
+    glosses: ['cześć'],
+    translation: 'cześć',
     matched: [true],
     score: 76,
   },
@@ -88,12 +88,15 @@ export function useRecorder(expectedGlosses: string[], options: Options = {}) {
   function attachPreview(stream: MediaStream) {
     const el = videoRef.current
     if (!el) return
-    el.srcObject = stream
-    void el.play().catch(() => {})
+    if (el.srcObject !== stream) el.srcObject = stream
+    if (el.paused) void el.play().catch(() => {})
   }
 
   async function ensureStream(): Promise<MediaStream> {
-    if (streamRef.current) return streamRef.current
+    if (streamRef.current) {
+      attachPreview(streamRef.current)
+      return streamRef.current
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: 'user',
@@ -142,6 +145,7 @@ export function useRecorder(expectedGlosses: string[], options: Options = {}) {
     }
   }, [preview])
 
+  // Always release the camera when leaving the view.
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach(t => t.stop())
@@ -149,10 +153,7 @@ export function useRecorder(expectedGlosses: string[], options: Options = {}) {
     }
   }, [])
 
-  useEffect(() => {
-    if (streamRef.current) attachPreview(streamRef.current)
-  })
-
+  // Do NOT re-attach preview every render — that restarts the video and flashes the camera.
   async function start() {
     try {
       setError(null)

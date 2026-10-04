@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
-import { ConversationAvatar } from '../../avatar/ConversationAvatar'
+import {
+  ConversationAvatar,
+  type ConversationAvatarHandle,
+} from '../../avatar/ConversationAvatar'
+import type { SignLandmarkClip } from '../../avatar/poseFromMediaPipe'
 
 type Props = { onBack: () => void }
 
@@ -8,6 +12,7 @@ type RecState = 'idle' | 'recording' | 'ready' | 'uploading' | 'uploaded' | 'err
 
 export function SignSampleStudio({ onBack }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const avatarRef = useRef<ConversationAvatarHandle>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
@@ -17,6 +22,7 @@ export function SignSampleStudio({ onBack }: Props) {
   const [recState, setRecState] = useState<RecState>('idle')
   const [blob, setBlob] = useState<Blob | null>(null)
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+  const [landmarksClip, setLandmarksClip] = useState<SignLandmarkClip | null>(null)
   const [status, setStatus] = useState<string | null>(null)
   const [clipId, setClipId] = useState<'1' | '2'>('1')
 
@@ -61,6 +67,7 @@ export function SignSampleStudio({ onBack }: Props) {
     if (!stream) return
     chunksRef.current = []
     setBlob(null)
+    setLandmarksClip(null)
     if (downloadUrl) URL.revokeObjectURL(downloadUrl)
     setDownloadUrl(null)
     setStatus(null)
@@ -73,10 +80,18 @@ export function SignSampleStudio({ onBack }: Props) {
       const next = new Blob(chunksRef.current, { type: 'video/webm' })
       setBlob(next)
       setDownloadUrl(URL.createObjectURL(next))
+      const clip = avatarRef.current?.stopLandmarkCapture() ?? null
+      setLandmarksClip(clip)
       setRecState('ready')
+      if (clip) {
+        setStatus(`Nagrano ${clip.frames.length} klatek kluczowych punktów (${clip.fps.toFixed(1)} fps).`)
+      } else {
+        setStatus('Nagranie wideo OK, ale brak punktów — poczekaj aż lustro się załaduje i nagraj ponownie.')
+      }
     }
     mr.start(200)
     mediaRef.current = mr
+    avatarRef.current?.startLandmarkCapture()
     setRecState('recording')
   }
 
@@ -93,19 +108,41 @@ export function SignSampleStudio({ onBack }: Props) {
     a.click()
   }
 
-  async function uploadAndPreprocess() {
+  function downloadLandmarks() {
+    if (!landmarksClip) return
+    const data = JSON.stringify(landmarksClip)
+    const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `avatar-sample-${clipId}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function uploadAndSave() {
     if (!blob) return
     setRecState('uploading')
     setStatus(null)
     try {
       const form = new FormData()
       form.append('video', new File([blob], `avatar-sample-${clipId}.webm`, { type: blob.type }))
+      if (landmarksClip) {
+        form.append(
+          'landmarks',
+          new File(
+            [JSON.stringify(landmarksClip)],
+            `avatar-sample-${clipId}.json`,
+            { type: 'application/json' },
+          ),
+        )
+      }
       const res = await fetch(`/api/avatar-sample/${clipId}`, { method: 'POST', body: form })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setRecState('uploaded')
       setStatus(
-        `Zapisano i przetworzono: ${data.frames} klatek → /media/sign_landmarks/${clipId}.json`,
+        `Zapisano: ${data.frames} klatek → /media/sign_landmarks/${clipId}.json` +
+          (data.source_kind === 'client' ? ' (z lustra na żywo)' : ' (z preprocessingu wideo)'),
       )
     } catch (e) {
       setRecState('error')
@@ -122,7 +159,7 @@ export function SignSampleStudio({ onBack }: Props) {
       <header className="learn-header practice-header">
         <h2>Nagraj wzorzec dla awatara</h2>
         <p className="learn-header__sub">
-          Awatar na żywo powtarza twoje ruchy. Nagraj próbkę, pobierz ją albo wyślij do preprocessingu.
+          Lustro na żywo zapisuje te same punkty kluczowe, którymi steruje awatar. Nagraj, wyślij albo pobierz JSON.
         </p>
       </header>
 
@@ -131,6 +168,7 @@ export function SignSampleStudio({ onBack }: Props) {
           <span className="practice-pane__label">Awatar (lustro)</span>
           <div className="practice-pane__media">
             <ConversationAvatar
+              ref={avatarRef}
               liveVideoRef={videoRef}
               liveTracking={camReady}
             />
@@ -162,8 +200,8 @@ export function SignSampleStudio({ onBack }: Props) {
                 onChange={e => setClipId(e.target.value as '1' | '2')}
                 disabled={recState === 'recording' || recState === 'uploading'}
               >
-                <option value="1">1.mp4 → landmarks/1.json</option>
-                <option value="2">2.mp4 → landmarks/2.json</option>
+                <option value="1">1 → landmarks/1.json</option>
+                <option value="2">2 → landmarks/2.json</option>
               </select>
             </label>
 
@@ -187,15 +225,23 @@ export function SignSampleStudio({ onBack }: Props) {
             {blob && downloadUrl && (
               <div className="chat-controls__row">
                 <button className="primary-button" type="button" onClick={downloadSample}>
-                  <Icon name="upload" size={15} /> Pobierz nagranie
+                  <Icon name="upload" size={15} /> Pobierz wideo
                 </button>
                 <button
                   className="back-button"
                   type="button"
-                  onClick={() => void uploadAndPreprocess()}
+                  onClick={downloadLandmarks}
+                  disabled={!landmarksClip}
+                >
+                  Pobierz punkty
+                </button>
+                <button
+                  className="back-button"
+                  type="button"
+                  onClick={() => void uploadAndSave()}
                   disabled={recState === 'uploading'}
                 >
-                  {recState === 'uploading' ? 'Przetwarzanie…' : 'Wyślij i przetwórz'}
+                  {recState === 'uploading' ? 'Zapisywanie…' : 'Wyślij i zapisz'}
                 </button>
               </div>
             )}

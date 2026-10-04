@@ -4,16 +4,13 @@ import { ConversationAvatar } from '../../avatar/ConversationAvatar'
 import { useRecorder } from '../../hooks/useRecorder'
 import type { ConversationMeta } from './ConversationsView'
 
-// ── Conversation script ───────────────────────────────────────────────────────
-//
-// Step 0 – intro:            user presses Start
-// Step 1 – user_greet:       user signs greeting → wait 3s after result → clip 1
-// Step 2 – avatar_question:  same MP+mirror path as studio, from recorded webm @ 1.5×
-// Step 3 – user_name:        user signs name → wait 3s after result
-// Step 4 – avatar_meet:      same sample (until a second clip exists)
-// Step 5 – wrap:             stay open (idle avatar) — no auto end
-const SIGN_VIDEO = '/avatar-sample-1.webm'
-const SIGN_PLAYBACK_RATE = 1.5
+const SIGN_LANDMARKS = '/avatar-sample-1.json'
+const SIGN_PLAYBACK_RATE = 1
+
+const AVATAR_GLOSSES = ['CZEŚĆ', 'JAK-SIĘ-MASZ']
+const AVATAR_TRANSLATION = 'Cześć, jak się masz?'
+const GLOSS_STREAM_MS = 1100
+const TRANSLATION_AFTER_MS = 450
 
 const AFTER_RESULT_DELAY_MS = 3000
 
@@ -24,11 +21,14 @@ type Props = { chat: ConversationMeta; onBack: () => void }
 
 export function ChatView({ chat, onBack }: Props) {
   const [step, setStep] = useState<Step>('intro')
+  const stepRef = useRef(step)
+  useEffect(() => { stepRef.current = step }, [step])
 
   function goTo(next: Step) { setStep(next) }
 
   const isAvatarTurn = step === 'avatar_question' || step === 'avatar_meet'
-  const signVideoUrl = isAvatarTurn ? SIGN_VIDEO : null
+  const { glosses, translation, streaming } = useAvatarCaption(isAvatarTurn)
+  const showCaption = glosses.length > 0 || !!translation || streaming
 
   return (
     <main className="learn-view practice-view">
@@ -50,15 +50,18 @@ export function ChatView({ chat, onBack }: Props) {
       </div>
 
       <div className="practice-split">
-        {/* Left: avatar */}
         <div className="practice-pane">
           <span className="practice-pane__label">Awatar</span>
           <div className="practice-pane__media">
             <ConversationAvatar
               signing={isAvatarTurn}
-              signVideoUrl={signVideoUrl}
+              landmarksUrl={isAvatarTurn ? SIGN_LANDMARKS : null}
+              loadTrackers={false}
               playbackRate={SIGN_PLAYBACK_RATE}
-              onSigningDone={() => goTo(step === 'avatar_question' ? 'user_name' : 'wrap')}
+              onSigningDone={() => {
+                const s = stepRef.current
+                goTo(s === 'avatar_question' ? 'user_name' : 'wrap')
+              }}
             />
           </div>
           <div className="chat-controls">
@@ -71,22 +74,26 @@ export function ChatView({ chat, onBack }: Props) {
             {!isAvatarTurn && step !== 'intro' && (
               <span className="translator-status" style={{ color: 'var(--green)' }}>Czeka…</span>
             )}
-            {(isAvatarTurn || step === 'wrap') && (
+            {showCaption && (
               <>
-                <div className="gloss-chips" style={{ justifyContent: 'center' }}>
-                  {['CZEŚĆ', 'MIŁO', 'TY', 'POZNAĆ'].map(g => (
-                    <span key={g} className="phrase-gesture-chip live-gloss-chip">{g}</span>
-                  ))}
-                </div>
-                <p className="chat-recognized">
-                  Tłumaczenie: <strong>Cześć, miło cię poznać</strong>
-                </p>
+                {glosses.length > 0 && (
+                  <div className="gloss-chips" style={{ justifyContent: 'center' }}>
+                    {glosses.map(g => (
+                      <span key={g} className="phrase-gesture-chip live-gloss-chip">{g}</span>
+                    ))}
+                    {streaming && <span className="spinner" style={{ marginLeft: 4 }} />}
+                  </div>
+                )}
+                {translation && (
+                  <p className="chat-recognized">
+                    Tłumaczenie: <strong>{translation}</strong>
+                  </p>
+                )}
               </>
             )}
           </div>
         </div>
 
-        {/* Right: user */}
         <div className="practice-pane">
           <span className="practice-pane__label">Twoja kolej</span>
 
@@ -98,24 +105,16 @@ export function ChatView({ chat, onBack }: Props) {
             </div>
           )}
 
-          {step === 'user_greet' && (
-            <UserRecordPanel onDone={() => goTo('avatar_question')} />
-          )}
-
-          {(step === 'avatar_question' || step === 'avatar_meet') && (
-            <div className="practice-pane__media chat-pane-center">
-              <p className="chat-recognized">Poczekaj, aż awatar skończy migać.</p>
-            </div>
-          )}
-
-          {step === 'user_name' && (
-            <UserRecordPanel onDone={() => goTo('avatar_meet')} />
-          )}
-
-          {step === 'wrap' && (
-            <div className="practice-pane__media chat-pane-center">
-              <p className="chat-recognized">Możesz wrócić do listy rozmów.</p>
-            </div>
+          {step !== 'intro' && (
+            <UserRecordPanel
+              demoKey="CZEŚĆ"
+              mode={isAvatarTurn ? 'waiting' : step === 'wrap' ? 'done' : 'record'}
+              turnKey={step === 'user_name' || step === 'avatar_meet' || step === 'wrap' ? 'name' : 'greet'}
+              onDone={() => {
+                const s = stepRef.current
+                goTo(s === 'user_greet' ? 'avatar_question' : 'avatar_meet')
+              }}
+            />
           )}
         </div>
       </div>
@@ -123,18 +122,78 @@ export function ChatView({ chat, onBack }: Props) {
   )
 }
 
+/** Stream glosses one-by-one while the avatar is signing; keep final caption afterward. */
+function useAvatarCaption(signing: boolean) {
+  const [glosses, setGlosses] = useState<string[]>([])
+  const [translation, setTranslation] = useState<string | null>(null)
+  const [streaming, setStreaming] = useState(false)
+  const finalRef = useRef<{ glosses: string[]; translation: string } | null>(null)
+  const runRef = useRef(0)
 
-// ── Record turn — auto-advance 3s after recognition/translation arrives ───────
+  useEffect(() => {
+    if (!signing) {
+      // Keep last completed caption for wrap / between turns
+      if (finalRef.current) {
+        setGlosses(finalRef.current.glosses)
+        setTranslation(finalRef.current.translation)
+      }
+      setStreaming(false)
+      return
+    }
 
-function UserRecordPanel({ onDone }: { onDone: () => void }) {
-  const { state, result, error, videoRef, start, stop } = useRecorder([], { preview: true })
+    const run = ++runRef.current
+    setGlosses([])
+    setTranslation(null)
+    setStreaming(true)
+    const timers: number[] = []
+    const shown: string[] = []
+
+    AVATAR_GLOSSES.forEach((g, i) => {
+      timers.push(window.setTimeout(() => {
+        if (runRef.current !== run) return
+        shown.push(g)
+        setGlosses([...shown])
+      }, 400 + i * GLOSS_STREAM_MS))
+    })
+
+    timers.push(window.setTimeout(() => {
+      if (runRef.current !== run) return
+      setTranslation(AVATAR_TRANSLATION)
+      setStreaming(false)
+      finalRef.current = { glosses: [...AVATAR_GLOSSES], translation: AVATAR_TRANSLATION }
+    }, 400 + AVATAR_GLOSSES.length * GLOSS_STREAM_MS + TRANSLATION_AFTER_MS))
+
+    return () => timers.forEach(clearTimeout)
+  }, [signing])
+
+  return { glosses, translation, streaming }
+}
+
+function UserRecordPanel({
+  onDone,
+  demoKey = 'CZEŚĆ',
+  mode = 'record',
+  turnKey = 'greet',
+}: {
+  onDone: () => void
+  demoKey?: string
+  mode?: 'record' | 'waiting' | 'done'
+  turnKey?: string
+}) {
+  const { state, result, error, videoRef, start, stop, reset } = useRecorder([], { preview: true, demoKey })
   const recording = state === 'recording'
   const [countdown, setCountdown] = useState<number | null>(null)
   const onDoneRef = useRef(onDone)
   useEffect(() => { onDoneRef.current = onDone }, [onDone])
 
+  // New user turn → clear previous result; stay mounted so the camera never drops.
   useEffect(() => {
-    if (!result) {
+    if (mode === 'record') reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, turnKey])
+
+  useEffect(() => {
+    if (!result || mode !== 'record') {
       setCountdown(null)
       return
     }
@@ -143,7 +202,7 @@ function UserRecordPanel({ onDone }: { onDone: () => void }) {
     const tick = setInterval(() => {
       const left = Math.ceil((AFTER_RESULT_DELAY_MS - (Date.now() - started)) / 1000)
       setCountdown(Math.max(0, left))
-    }, 200)
+    }, 250)
     const done = setTimeout(() => {
       clearInterval(tick)
       onDoneRef.current()
@@ -152,7 +211,7 @@ function UserRecordPanel({ onDone }: { onDone: () => void }) {
       clearInterval(tick)
       clearTimeout(done)
     }
-  }, [result])
+  }, [result, mode])
 
   return (
     <>
@@ -167,31 +226,38 @@ function UserRecordPanel({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="chat-controls">
-        {state === 'idle' && (
+        {mode === 'waiting' && (
+          <span className="translator-status">Poczekaj, aż awatar skończy migać.</span>
+        )}
+        {mode === 'done' && (
+          <p className="chat-recognized">Możesz wrócić do listy rozmów.</p>
+        )}
+
+        {mode === 'record' && state === 'idle' && (
           <button className="primary-button" onClick={start} type="button">
             <Icon name="play" size={15} /> Nagraj
           </button>
         )}
-        {state === 'recording' && (
+        {mode === 'record' && state === 'recording' && (
           <button className="stop-button" onClick={stop} type="button">
             <Icon name="pause" size={15} /> Zatrzymaj
             <span className="record-indicator record-indicator--inline" />
           </button>
         )}
-        {state === 'grading' && (
+        {mode === 'record' && state === 'grading' && (
           <span className="translator-status"><span className="spinner" /> Rozpoznawanie…</span>
         )}
-        {state === 'error' && (
+        {mode === 'record' && state === 'error' && (
           <span className="translator-status translator-status--error">
             <Icon name="info" size={16} /> {error}
           </span>
         )}
 
-        {result && (
+        {result && mode !== 'done' && (
           <>
             {result.glosses.length > 0 && (
               <p className="chat-recognized">
-                Rozpoznano: <strong>{result.glosses.join(' ')}</strong>
+                Transkrypcja: <strong>{result.glosses.join(' ')}</strong>
               </p>
             )}
             {result.translation && (
@@ -199,7 +265,7 @@ function UserRecordPanel({ onDone }: { onDone: () => void }) {
                 Tłumaczenie: <strong>{result.translation}</strong>
               </p>
             )}
-            {countdown != null && (
+            {mode === 'record' && countdown != null && (
               <span className="translator-status">
                 Awatar odpowie za {countdown}s…
               </span>

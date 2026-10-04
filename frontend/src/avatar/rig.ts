@@ -73,7 +73,7 @@ const SPLAY_LIMIT = 0.45
 const ANGLE_DEADZONE = 0.03
 const ANGLE_TAU = 0.055
 const SHOULDER_LIMIT = 0.5
-const HINGE_MIN_BEND = 0.35
+const HINGE_MIN_BEND = 0.45
 const HEAD_DEADZONE = 0.025
 const HEAD_TAU_SLOW = 0.22
 const HEAD_TAU_FAST = 0.07
@@ -277,7 +277,9 @@ export class AvatarRig {
     const fore = wrist.clone().sub(elbow)
     const hinge = this.elbowHinge(side, upper, fore)
 
-    this.aim(`${side}Arm`, upper, hinge, dt)
+    // Upper arm: swing only. Feeding the elbow hinge here rolls the humerus
+    // whenever the bend plane is noisy (looks like continuous shoulder twist).
+    this.aim(`${side}Arm`, upper, null, dt)
     this.aim(`${side}ForeArm`, fore, hinge, dt)
 
     if (arm.hand && arm.hand.length >= 21) {
@@ -413,7 +415,8 @@ export class AvatarRig {
     hinge.normalize()
     if (prev && prev.dot(hinge) < 0) hinge.negate()
     if (prev) {
-      prev.lerp(hinge, clamp((bend - HINGE_MIN_BEND) * 2, 0.15, 1)).normalize()
+      // Keep hinge stable — landmark noise was spinning the forearm roll.
+      prev.lerp(hinge, clamp((bend - HINGE_MIN_BEND) * 1.2, 0.08, 0.35)).normalize()
       return prev.clone()
     }
     this.hingeSign.set(side, hinge.clone())

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '../Icon'
 import { ChatView } from './ChatView'
-import { SignSampleStudio } from './SignSampleStudio'
 
 export type ConversationMeta = {
   id: string
@@ -40,11 +39,6 @@ const CHATS: ConversationMeta[] = [
 
 export function ConversationsView() {
   const [activeChat, setActiveChat] = useState<ConversationMeta | null>(null)
-  const [studioOpen, setStudioOpen] = useState(false)
-
-  if (studioOpen) {
-    return <SignSampleStudio onBack={() => setStudioOpen(false)} />
-  }
 
   if (activeChat) {
     return <ChatView chat={activeChat} onBack={() => setActiveChat(null)} />
@@ -84,13 +78,6 @@ export function ConversationsView() {
           type="button"
         >
           <Icon name="play" size={15} /> Nowa rozmowa
-        </button>
-        <button
-          className="back-button"
-          onClick={() => setStudioOpen(true)}
-          type="button"
-        >
-          <Icon name="hand" size={15} /> Nagraj wzorzec awatara
         </button>
       </div>
     </main>
