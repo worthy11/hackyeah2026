@@ -15,6 +15,10 @@ from .gemini import GeminiTranslator
 
 MODELS_DIR = Path(__file__).resolve().parent / "models"
 BLANK_GLOSS = "blank"
+ALIGN_MIN_MEAN_CONFIDENCE = 0.45
+# Tuned on a handful of clips: the right sentence never had a gloss below 0.2, other sentences had letters near 0.1.
+ALIGN_MIN_GLOSS_CONFIDENCE = 0.15
+ALIGN_MARGIN_SECONDS = 0.5
 
 
 @dataclass
@@ -48,7 +52,37 @@ class SignLanguagePipeline:
         self.translator = translator
         self.segmenter = SignSegmenter(models_dir / "segmenter", device)
         classifier_dir = Path(os.environ.get("SIGN_CLASSIFIER_DIR", models_dir))
-        self.classifier = GlossClassifier(classifier_dir / "classifier.pth", classifier_dir / "labels.json", device)
+        # Override via .env: SIGN_CLASSIFIER_WEIGHTS / SIGN_CLASSIFIER_LABELS
+        weights = Path(os.environ.get("SIGN_CLASSIFIER_WEIGHTS", classifier_dir / "classifier.pth"))
+        labels = Path(os.environ.get("SIGN_CLASSIFIER_LABELS", classifier_dir / "labels.json"))
+        self.classifier = GlossClassifier(weights, labels, device)
+        self.classifier_weights = weights
+        self.classifier_labels = labels
+
+    def align(
+        self,
+        landmarks,
+        fps: float,
+        segments: list[tuple[int, int]],
+        glosses: list[str],
+        min_mean_confidence: float = ALIGN_MIN_MEAN_CONFIDENCE,
+        min_gloss_confidence: float = ALIGN_MIN_GLOSS_CONFIDENCE,
+    ) -> list[DetectedSign] | None:
+        """Place the known sentence `glosses` in the video (see `align_glosses`), searching the detected
+        signing plus a margin. None if there is no signing or the sentence does not fit well (the mean
+        probability of the glosses is below `min_mean_confidence`, or any single gloss below
+        `min_gloss_confidence`), i.e. the video says something else."""
+        if not segments:
+            return None
+        margin = round(ALIGN_MARGIN_SECONDS * fps)
+        region = (max(0, segments[0][0] - margin), min(len(landmarks), segments[-1][1] + margin))
+        aligned = align_glosses(self.classifier, landmarks, fps, glosses, region)
+        if len(aligned) != len(glosses):
+            return None
+        confidences = [c for *_, c in aligned]
+        if sum(confidences) / len(confidences) < min_mean_confidence or min(confidences) < min_gloss_confidence:
+            return None
+        return [DetectedSign(gloss, confidence, start, end) for gloss, (start, end, confidence) in zip(glosses, aligned)]
 
     def recognize(
         self,
@@ -73,11 +107,9 @@ class SignLanguagePipeline:
         fps = float(pose.body.fps)
         raw_segments = self.segmenter.segment(pose)
         segments = refine_segments(raw_segments, len(landmarks), fps, expected_signs=expected_signs or (len(expected_glosses) if expected_glosses else None))
-        signs = []
-        if expected_glosses and segments:
-            aligned = align_glosses(self.classifier, landmarks, fps, expected_glosses, (segments[0][0], segments[-1][1]))
-            signs = [DetectedSign(gloss, confidence, start, end) for gloss, (start, end, confidence) in zip(expected_glosses, aligned)]
-        else:
+        signs = self.align(landmarks, fps, segments, expected_glosses) if expected_glosses else None
+        if signs is None:
+            signs = []
             for start, end in segments:
                 gloss, confidence = self.classifier.classify(landmarks[start:end], fps)
                 if gloss != BLANK_GLOSS:

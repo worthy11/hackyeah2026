@@ -11,8 +11,8 @@ httpx==0.28.1
 python-multipart==0.0.20
 
 # Sign language processing
-torch==2.14.1
+torch==2.5.1
 numpy<2
-mediapipe==0.10.21
+mediapipe==0.10.14
 pose-format==0.15.0
 safetensors==0.8.0

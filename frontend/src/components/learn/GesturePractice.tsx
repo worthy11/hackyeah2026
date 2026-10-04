@@ -1,45 +1,27 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { Icon } from '../Icon'
-import { StaticAvatar } from '../../avatar/StaticAvatar'
 import type { Gesture } from '../../data/mockLearning'
+import { useRecorder, type RecorderState } from '../../hooks/useRecorder'
+import { useGestureVideos, type GestureVideo } from '../../hooks/useGestureVideos'
+import { TempoAdjuster, VersionedGesturePlayer } from './GestureVideoPlayer'
+import { GradePanel } from './GradePanel'
 
-type Props = {
-  gesture: Gesture
+type ShellProps = {
+  title: string
+  videos: GestureVideo[]
+  expectedGlosses: string[]
+  demoKey: string
   onBack: () => void
 }
 
-export function GesturePractice({ gesture, onBack }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const [cameraActive, setCameraActive] = useState(false)
-  const [cameraError, setCameraError] = useState<string | null>(null)
-
-  // Score will be filled in by the classifier later
-  const score: number | null = null
-
-  async function startCamera() {
-    const video = videoRef.current
-    if (!video) return
-    setCameraError(null)
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: false,
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-      })
-      streamRef.current = stream
-      video.srcObject = stream
-      await video.play()
-      setCameraActive(true)
-    } catch {
-      setCameraError('Brak dostępu do kamery.')
-    }
-  }
-
-  useEffect(() => {
-    return () => {
-      streamRef.current?.getTracks().forEach((t) => t.stop())
-    }
-  }, [])
+/** Shared learn practice layout — used by both gesture and phrase views. */
+export function PracticeShell({ title, videos, expectedGlosses, demoKey, onBack }: ShellProps) {
+  // Single camera stream for the whole practice visit; released on leave (unmount).
+  const { state, result, error, videoRef, start, stop, reset } = useRecorder(expectedGlosses, {
+    demoKey,
+    preview: true,
+  })
+  const [tempo, setTempo] = useState(1)
 
   return (
     <main className="learn-view practice-view">
@@ -49,66 +31,123 @@ export function GesturePractice({ gesture, onBack }: Props) {
       </button>
 
       <header className="learn-header practice-header">
-        <span className="eyebrow eyebrow--green">Ćwiczenie</span>
-        <h2>{gesture.gloss}</h2>
-        <p>Odwzoruj gest widoczny po lewej stronie</p>
+        <h2>{title}</h2>
+        {videos.length > 1 && (
+          <span className="eyebrow eyebrow--green">{videos.length} nagrania dostępne</span>
+        )}
       </header>
 
-      <div className="practice-stage">
-        {/* Avatar pane */}
-        <div className="practice-pane practice-pane--avatar">
-          <span className="practice-pane-label">Wzór</span>
-          <div className="practice-avatar-wrap">
-            <StaticAvatar />
+      <div className="practice-split">
+        <div className="practice-pane">
+          <span className="practice-pane__label">
+            <span>Wzór</span>
+            {videos.length > 0
+              ? <TempoAdjuster value={tempo} onChange={setTempo} />
+              : <span className="tempo-adjuster tempo-adjuster--spacer" aria-hidden />
+            }
+          </span>
+          <div className="practice-pane__media">
+            {videos.length > 0
+              ? <VersionedGesturePlayer versions={videos} className="practice-video" playbackRate={tempo} />
+              : <div className="practice-pane__placeholder"><Icon name="play" size={32} /></div>
+            }
           </div>
         </div>
 
-        {/* Camera pane */}
-        <div className="practice-pane practice-pane--cam">
-          <span className="practice-pane-label">Twoja kamera</span>
-          <div className="practice-cam-wrap">
-            <video
-              ref={videoRef}
-              className="practice-video"
-              playsInline
-              muted
-            />
-            {!cameraActive && (
-              <div className="practice-cam-overlay">
-                {cameraError
-                  ? <p className="practice-cam-error">{cameraError}</p>
-                  : null}
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void startCamera()}
-                >
-                  Włącz kamerę
-                </button>
-              </div>
-            )}
+        <div className="practice-pane">
+          <span className="practice-pane__label">
+            <span>Twoja kamera</span>
+            <span className="tempo-adjuster tempo-adjuster--spacer" aria-hidden />
+          </span>
+          <div className="practice-pane__media">
+            <div className="versioned-player">
+              <video
+                ref={videoRef}
+                className="practice-video practice-video--mirror"
+                muted
+                playsInline
+              />
+              {state === 'recording' && <span className="record-indicator" />}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Accuracy score */}
-      <div className="practice-score-row">
-        <div className="practice-score-badge">
-          {score !== null
-            ? (
-              <>
-                <span className="practice-score-value">{score}%</span>
-                <span className="practice-score-label">zgodności</span>
-              </>
-            )
-            : (
-              <>
-                <span className="practice-score-value practice-score-value--empty">—</span>
-                <span className="practice-score-label">Pokaż gest przed kamerą</span>
-              </>
-            )}
-        </div>
-      </div>
+      {(state === 'idle' || state === 'recording' || state === 'grading' || state === 'error') && (
+        <RecordBar state={state} error={error} onStart={start} onStop={stop} onReset={reset} />
+      )}
+
+      {result && <GradePanel result={result} expectedGlosses={expectedGlosses} />}
+
+      {state === 'graded' && (
+        <RecordBar state={state} error={error} onStart={start} onStop={stop} onReset={reset} />
+      )}
     </main>
+  )
+}
+
+type Props = { gesture: Gesture; onBack: () => void }
+
+export function GesturePractice({ gesture, onBack }: Props) {
+  const glossKey = gesture.gloss.toUpperCase().trim()
+  const { versions } = useGestureVideos()
+  const videos = versions[glossKey] ?? []
+
+  return (
+    <PracticeShell
+      title={gesture.gloss}
+      videos={videos}
+      expectedGlosses={[gesture.gloss]}
+      demoKey={glossKey}
+      onBack={onBack}
+    />
+  )
+}
+
+// ── Shared recording bar ──────────────────────────────────────────────────────
+
+type RecordBarProps = {
+  state: RecorderState
+  error: string | null
+  onStart: () => void
+  onStop: () => void
+  onReset: () => void
+}
+
+export function RecordBar({ state, error, onStart, onStop, onReset }: RecordBarProps) {
+  return (
+    <div className={`record-bar record-bar--${state}`}>
+      {state === 'idle' && (
+        <button className="record-bar__btn record-bar__btn--start" onClick={onStart} type="button">
+          <Icon name="play" size={16} /> Nagraj i oceń
+        </button>
+      )}
+      {state === 'recording' && (
+        <button className="record-bar__btn record-bar__btn--stop" onClick={onStop} type="button">
+          <span className="record-indicator record-indicator--inline" />
+          Zatrzymaj
+        </button>
+      )}
+      {state === 'grading' && (
+        <span className="record-bar__status">
+          <span className="spinner" /> Ocenianie…
+        </span>
+      )}
+      {state === 'error' && (
+        <div className="record-bar__error-row">
+          <span className="record-bar__status record-bar__status--error">
+            <Icon name="info" size={16} /> {error}
+          </span>
+          <button className="record-bar__btn record-bar__btn--retry" onClick={onReset} type="button">
+            Spróbuj ponownie
+          </button>
+        </div>
+      )}
+      {state === 'graded' && (
+        <button className="record-bar__btn record-bar__btn--retry" onClick={onReset} type="button">
+          <Icon name="play" size={15} /> Nagraj ponownie
+        </button>
+      )}
+    </div>
   )
 }
