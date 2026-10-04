@@ -1,11 +1,9 @@
 {
   "ja": 0,
-  "ty": 1,
-  "poznać": 2,
-  "miło": 3,
-  "mężczyzna": 4,
-  "kobieta": 5,
-  "imię": 6,
-  "cześć": 7,
-  "jak się czujesz": 8
+  "imię": 1,
+  "p": 2,
+  "i": 3,
+  "o": 4,
+  "t": 5,
+  "r": 6
 }

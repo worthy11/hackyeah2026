@@ -51,6 +51,6 @@ def translate(video: UploadFile, debug: bool = False):
         except Exception as exc:
             raise HTTPException(status_code=503, detail=f"ML pipeline unavailable: {exc}") from exc
         try:
-            return pipeline.recognize(video_path, debug=debug)
+            return pipeline.recognize(video_path, debug=debug, expected_glosses=settings.expected_gloss_list or None)
         except ValueError as error:
             raise HTTPException(status_code=422, detail=str(error)) from error

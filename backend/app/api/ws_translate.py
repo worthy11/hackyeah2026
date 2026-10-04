@@ -25,6 +25,8 @@ from pathlib import Path
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from app.core.config import settings
+
 from .sign_language import get_pipeline
 
 log = logging.getLogger("uvicorn.error")
@@ -162,19 +164,41 @@ async def ws_translate(websocket: WebSocket) -> None:  # noqa: C901
                     await websocket.send_json({"type": "status", "stage": "classifying"})
                     signs: list[dict] = []
                     classify_times: list[float] = []
-                    for start, end in segments:
-                        gloss, confidence, dt = await loop.run_in_executor(
-                            None, _classify_one, pipeline, landmarks, start, end, fps
+
+                    # Known sentence configured (EXPECTED_GLOSSES): place it by forced alignment;
+                    # None means it does not fit this video, so fall back to free recognition.
+                    aligned = None
+                    if settings.expected_gloss_list:
+                        t_align = time.perf_counter()
+                        aligned = await loop.run_in_executor(
+                            None, pipeline.align, landmarks, fps, segments, settings.expected_gloss_list
                         )
-                        classify_times.append(dt)
-                        if gloss == "blank":
-                            continue
-                        signs.append({
-                            "gloss": gloss,
-                            "confidence": round(confidence, 3),
-                            "start_frame": int(start),
-                            "end_frame": int(end),
-                        })
+                        classify_times.append(time.perf_counter() - t_align)
+                        log.info("forced alignment %s", "used" if aligned else "rejected, falling back")
+                    if aligned:
+                        signs = [
+                            {
+                                "gloss": s.gloss,
+                                "confidence": round(s.confidence, 3),
+                                "start_frame": int(s.start_frame),
+                                "end_frame": int(s.end_frame),
+                            }
+                            for s in aligned
+                        ]
+                    else:
+                        for start, end in segments:
+                            gloss, confidence, dt = await loop.run_in_executor(
+                                None, _classify_one, pipeline, landmarks, start, end, fps
+                            )
+                            classify_times.append(dt)
+                            if gloss == "blank":
+                                continue
+                            signs.append({
+                                "gloss": gloss,
+                                "confidence": round(confidence, 3),
+                                "start_frame": int(start),
+                                "end_frame": int(end),
+                            })
 
                     classify_s = sum(classify_times)
                     avg_ms = (classify_s / len(classify_times) * 1000) if classify_times else 0

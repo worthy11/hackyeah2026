@@ -51,6 +51,19 @@ Settings (`backend/.env` or environment):
 | `GEMINI_API_KEY` | empty | translation disabled when empty |
 | `GEMINI_MODEL` | `gemini-3.8-flash` | |
 | `SIGN_CLASSIFIER_DIR` | `models/` | alternative folder with `classifier.pth` + `labels.json` |
+| `EXPECTED_GLOSSES` | `ja,imię,p,i,o,t,r` | sentence the bundled classifier is specialized for; empty = free recognition only |
+
+## Bundled model and forced alignment
+
+The bundled classifier knows exactly 7 signs: `ja`, `imię`, `p`, `i`, `o`, `t`, `r` ("ja imię Piotr").
+With `EXPECTED_GLOSSES` set, `SignLanguagePipeline.align` places that sentence in the video (best ordered,
+non-overlapping windows by classifier probability, `alignment.py`). The result is rejected, and free
+recognition (segmenter → classifier) is used instead, when the mean probability is below 0.45 or any gloss
+is below 0.15. In aligned results `confidence` is the probability of the expected gloss, so check it: weak
+glosses (e.g. below 0.3) are the least bad match, not a detection.
+
+Optional pipeline arguments: `recognize(..., expected_glosses=[...])` and `recognize(..., expected_signs=N)`
+(merge the shortest segments until at most N remain).
 
 ## Python
 
@@ -68,3 +81,5 @@ Loading takes a few seconds; create the pipeline once and reuse it.
 
 - Unmirrored video, signer facing the camera, both hands in frame for the whole sign.
 - Only glosses listed in `labels.json` can be recognized.
+- The classifier was trained on landmarks extracted with the settings in `landmarks.py` (15 fps, 480 px,
+  MediaPipe complexity 0); changing them requires retraining.
