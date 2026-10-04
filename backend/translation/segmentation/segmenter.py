@@ -63,9 +63,13 @@ def refine_segments(
     min_sign_seconds: float = 0.2,
     merge_gap_seconds: float = 0.1,
     max_padding_seconds: float | None = 0.5,
+    expected_signs: int | None = None,
 ) -> list[tuple[int, int]]:
     """Merge signs split by short pauses, drop blips, then extend each sign towards the midpoints
-    of the surrounding pauses (by at most `max_padding_seconds`; None uses every frame)."""
+    of the surrounding pauses (by at most `max_padding_seconds`; None uses every frame).
+
+    With `expected_signs` (known sentence length), the shortest sign is merged into its nearest
+    neighbour until at most that many remain; fewer detected signs are left as they are."""
     merged: list[tuple[int, int]] = []
     for start, end in segments:
         if merged and (start - merged[-1][1]) / fps < merge_gap_seconds:
@@ -73,6 +77,12 @@ def refine_segments(
         else:
             merged.append((start, end))
     signs = [(start, end) for start, end in merged if (end - start) / fps >= min_sign_seconds]
+    while expected_signs is not None and len(signs) > expected_signs:
+        shortest = min(range(len(signs)), key=lambda k: signs[k][1] - signs[k][0])
+        gap_before = signs[shortest][0] - signs[shortest - 1][1] if shortest > 0 else float("inf")
+        gap_after = signs[shortest + 1][0] - signs[shortest][1] if shortest < len(signs) - 1 else float("inf")
+        i = shortest - 1 if gap_before <= gap_after else shortest
+        signs[i : i + 2] = [(signs[i][0], signs[i + 1][1])]
 
     pad = n_frames if max_padding_seconds is None else round(max_padding_seconds * fps)
     bounds = [0] + [(end + start) // 2 for (_, end), (start, _) in zip(signs, signs[1:])] + [n_frames]

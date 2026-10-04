@@ -49,10 +49,14 @@ class GlossClassifier:
         self.labels = {index: label for label, index in label_to_index.items()}
 
     @torch.inference_mode()
-    def classify(self, landmarks: np.ndarray, fps: float) -> tuple[str, float]:
-        """Return the most likely gloss and its probability for a (T, 75, 3) landmark clip."""
+    def log_probs(self, landmarks: np.ndarray, fps: float) -> np.ndarray:
+        """Log-probability of every class (indexed like `labels`) for a (T, 75, 3) landmark clip."""
         step = max(1, round(fps / MODEL_FPS))
         x = preprocess(torch.from_numpy(landmarks[::step].copy())).to(self.device)
-        probs = self.model(x[None]).softmax(dim=-1)[0]
-        confidence, index = probs.max(dim=0)
-        return self.labels[index.item()], confidence.item()
+        return self.model(x[None]).log_softmax(dim=-1)[0].cpu().numpy()
+
+    def classify(self, landmarks: np.ndarray, fps: float) -> tuple[str, float]:
+        """Return the most likely gloss and its probability for a (T, 75, 3) landmark clip."""
+        log_probs = self.log_probs(landmarks, fps)
+        index = int(log_probs.argmax())
+        return self.labels[index], float(np.exp(log_probs[index]))
