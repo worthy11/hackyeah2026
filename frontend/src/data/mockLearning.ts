@@ -7,6 +7,29 @@ export type Category = {
   icon: IconName
 }
 
+/** Distinct accent per category (fg + soft bg). Indexed by category id. */
+export const CATEGORY_COLORS: Record<number, { fg: string; bg: string }> = {
+  1:  { fg: '#1e7d5e', bg: '#e5f3ed' }, // Zwroty grzecznościowe — green
+  2:  { fg: '#c45c26', bg: '#f8ebe3' }, // Rodzina — terracotta
+  3:  { fg: '#2a6f97', bg: '#e6f0f6' }, // Wygląd — blue
+  4:  { fg: '#b23a48', bg: '#f6e6e8' }, // Emocje — rose
+  5:  { fg: '#3d5a80', bg: '#e8edf3' }, // Kierunki — slate blue
+  6:  { fg: '#b68519', bg: '#f7f0de' }, // Jedzenie — gold
+  7:  { fg: '#5c6b4a', bg: '#eef1e8' }, // Alfabet — olive
+  8:  { fg: '#0d7377', bg: '#e3f2f2' }, // Czas — teal
+  9:  { fg: '#8a5a44', bg: '#f2ebe7' }, // Dom — brown
+  10: { fg: '#d97706', bg: '#fef3e2' }, // Kolory — amber
+  11: { fg: '#475569', bg: '#eceff3' }, // Liczby — gray
+  12: { fg: '#0284c7', bg: '#e0f2fe' }, // Pogoda — sky
+  13: { fg: '#be185d', bg: '#fce7f0' }, // Zakupy — pink
+  14: { fg: '#4f46e5', bg: '#e8e7fa' }, // Szkoła — indigo
+  15: { fg: '#15803d', bg: '#e5f5ea' }, // Zdrowie — forest
+}
+
+export function categoryColor(id: number): { fg: string; bg: string } {
+  return CATEGORY_COLORS[id] ?? { fg: '#1e7d5e', bg: '#e8f0ec' }
+}
+
 export type Gesture = {
   id: number
   categoryId: number
@@ -22,7 +45,7 @@ export type Phrase = {
 }
 
 export const categories: Category[] = [
-  { id:  1, name: 'Powitania',            description: 'Przywitanie i small talk',          icon: 'hand'       },
+  { id:  1, name: 'Zwroty grzecznościowe', description: 'Powitania, podziękowania i uprzejmości', icon: 'hand' },
   { id:  2, name: 'Rodzina',              description: 'Członkowie rodziny',                icon: 'people'     },
   { id:  3, name: 'Wygląd',              description: 'Opis wyglądu i cech fizycznych',    icon: 'eye'        },
   { id:  4, name: 'Emocje',              description: 'Wyrażanie uczuć i nastrojów',       icon: 'heart'      },
@@ -40,7 +63,7 @@ export const categories: Category[] = [
 ]
 
 export const gestures: Gesture[] = [
-  // Powitania (1)
+  // Zwroty grzecznościowe (1)
   { id: 101, categoryId: 1, gloss: 'CZEŚĆ',       videoPath: null },
   { id: 102, categoryId: 1, gloss: 'DZIEŃ DOBRY', videoPath: null },
   { id: 103, categoryId: 1, gloss: 'DO WIDZENIA', videoPath: null },
@@ -201,10 +224,11 @@ export const gestures: Gesture[] = [
 ]
 
 export const phrases: Phrase[] = [
-  // Powitania (1)
+  // Zwroty grzecznościowe (1)
   { id: 1001, categoryId: 1, translation: 'Hej, co słychać?',              gestureIds: [101, 101] },
   { id: 1002, categoryId: 1, translation: 'Dzień dobry, dziękuję bardzo.', gestureIds: [102, 104] },
   { id: 1003, categoryId: 1, translation: 'Przepraszam, muszę już iść.',   gestureIds: [106, 103] },
+  { id: 1004, categoryId: 1, translation: 'Czuję się dobrze, a Ty?',       gestureIds: [101] },
 
   // Rodzina (2)
   { id: 2001, categoryId: 2, translation: 'To moja mama.',                 gestureIds: [201] },

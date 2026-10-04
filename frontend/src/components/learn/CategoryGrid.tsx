@@ -1,5 +1,6 @@
+import type { CSSProperties } from 'react'
 import { Icon } from '../Icon'
-import { categories, gestures, phrases, type Category } from '../../data/mockLearning'
+import { categories, categoryColor, gestures, phrases, type Category } from '../../data/mockLearning'
 
 type Props = { onSelect: (category: Category) => void }
 
@@ -10,12 +11,14 @@ export function CategoryGrid({ onSelect }: Props) {
         {[...categories].sort((a, b) => a.name.localeCompare(b.name, 'pl')).map(cat => {
           const gestureCount = gestures.filter(g => g.categoryId === cat.id).length
           const phraseCount  = phrases.filter(p => p.categoryId  === cat.id).length
+          const { fg, bg } = categoryColor(cat.id)
           return (
             <button
               key={cat.id}
               className="category-tile"
               onClick={() => onSelect(cat)}
               type="button"
+              style={{ '--cat-fg': fg, '--cat-bg': bg } as CSSProperties}
             >
               <span className="category-tile__icon">
                 <Icon name={cat.icon} size={22} />

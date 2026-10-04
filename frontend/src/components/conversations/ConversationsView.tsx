@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Icon } from '../Icon'
 import { ChatView } from './ChatView'
+import { SignSampleStudio } from './SignSampleStudio'
 
 export type ConversationMeta = {
   id: string
@@ -39,6 +40,11 @@ const CHATS: ConversationMeta[] = [
 
 export function ConversationsView() {
   const [activeChat, setActiveChat] = useState<ConversationMeta | null>(null)
+  const [studioOpen, setStudioOpen] = useState(false)
+
+  if (studioOpen) {
+    return <SignSampleStudio onBack={() => setStudioOpen(false)} />
+  }
 
   if (activeChat) {
     return <ChatView chat={activeChat} onBack={() => setActiveChat(null)} />
@@ -59,7 +65,6 @@ export function ConversationsView() {
             </div>
             <div className="chat-list-item__content">
               <strong>{chat.title}</strong>
-              <span>{chat.subtitle}</span>
             </div>
             <span className="chat-list-item__date">{chat.lastDate}</span>
             <Icon name="arrow" size={14} />
@@ -67,14 +72,27 @@ export function ConversationsView() {
         ))}
       </div>
 
-      <button
-        className="primary-button"
-        style={{ marginTop: 24 }}
-        onClick={() => setActiveChat(CHATS[0])}
-        type="button"
-      >
-        <Icon name="play" size={15} /> Nowa rozmowa
-      </button>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 24 }}>
+        <button
+          className="primary-button"
+          onClick={() => setActiveChat({
+            id: `new-${Date.now()}`,
+            title: 'Nowa konwersacja',
+            subtitle: '',
+            lastDate: 'dziś',
+          })}
+          type="button"
+        >
+          <Icon name="play" size={15} /> Nowa rozmowa
+        </button>
+        <button
+          className="back-button"
+          onClick={() => setStudioOpen(true)}
+          type="button"
+        >
+          <Icon name="hand" size={15} /> Nagraj wzorzec awatara
+        </button>
+      </div>
     </main>
   )
 }

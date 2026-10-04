@@ -1,39 +1,34 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Icon } from '../Icon'
 import { ConversationAvatar } from '../../avatar/ConversationAvatar'
 import { useRecorder } from '../../hooks/useRecorder'
-import { GradePanel } from '../learn/GradePanel'
 import type { ConversationMeta } from './ConversationsView'
 
 // ── Conversation script ───────────────────────────────────────────────────────
 //
 // Step 0 – intro:            user presses Start
-// Step 1 – user_greet:       user zamigaj CZEŚĆ  (graded)
-// Step 2 – avatar_question:  avatar zamigaj "Cześć, jak masz na imię?"
-// Step 3 – user_name:        user zamigaj name  (any gesture)
-// Step 4 – avatar_meet:      avatar zamigaj "Miło mi cię poznać, ___"
-// Step 5 – done
-//
-// Set these to landmark URLs once gesture videos are processed.
-const LANDMARKS = {
-  question: null as string | null,  // TODO: '/media/landmarks/XX.json'
-  meet:     null as string | null,  // TODO: '/media/landmarks/YY.json'
-}
+// Step 1 – user_greet:       user signs greeting → wait 3s after result → clip 1
+// Step 2 – avatar_question:  same MP+mirror path as studio, from recorded webm @ 1.5×
+// Step 3 – user_name:        user signs name → wait 3s after result
+// Step 4 – avatar_meet:      same sample (until a second clip exists)
+// Step 5 – wrap:             stay open (idle avatar) — no auto end
+const SIGN_VIDEO = '/avatar-sample-1.webm'
+const SIGN_PLAYBACK_RATE = 1.5
 
-type Step = 'intro' | 'user_greet' | 'avatar_question' | 'user_name' | 'avatar_meet' | 'done'
-const STEPS: Step[] = ['intro', 'user_greet', 'avatar_question', 'user_name', 'avatar_meet', 'done']
+const AFTER_RESULT_DELAY_MS = 3000
+
+type Step = 'intro' | 'user_greet' | 'avatar_question' | 'user_name' | 'avatar_meet' | 'wrap'
+const STEPS: Step[] = ['intro', 'user_greet', 'avatar_question', 'user_name', 'avatar_meet', 'wrap']
 
 type Props = { chat: ConversationMeta; onBack: () => void }
 
 export function ChatView({ chat, onBack }: Props) {
-  const [step, setStep]         = useState<Step>('intro')
-  const [userName, setUserName] = useState('')
+  const [step, setStep] = useState<Step>('intro')
 
   function goTo(next: Step) { setStep(next) }
 
-  const isAvatarTurn    = step === 'avatar_question' || step === 'avatar_meet'
-  const avatarLandmarks = step === 'avatar_question' ? LANDMARKS.question : LANDMARKS.meet
-  const avatarDuration  = step === 'avatar_question' ? 3000 : 3500
+  const isAvatarTurn = step === 'avatar_question' || step === 'avatar_meet'
+  const signVideoUrl = isAvatarTurn ? SIGN_VIDEO : null
 
   return (
     <main className="learn-view practice-view">
@@ -45,187 +40,173 @@ export function ChatView({ chat, onBack }: Props) {
         <h2>{chat.title}</h2>
       </header>
 
-      {/* Progress */}
       <div className="chat-progress">
         {STEPS.map((s, i) => (
-          <span key={s} className={`chat-dot${step === s ? ' chat-dot--active' : i < STEPS.indexOf(step) ? ' chat-dot--done' : ''}`} />
+          <span
+            key={s}
+            className={`chat-dot${step === s ? ' chat-dot--active' : i < STEPS.indexOf(step) ? ' chat-dot--done' : ''}`}
+          />
         ))}
       </div>
 
-      {step === 'done' ? (
-        <DoneStep onRestart={() => goTo('intro')} onBack={onBack} />
-      ) : (
-        <div className="practice-split">
-          {/* Left: avatar — always mounted, signing prop drives animation */}
-          <div className="practice-pane">
-            <span className="practice-pane__label">Awatar</span>
-            <div className="practice-pane__media">
-              <ConversationAvatar
-                signing={isAvatarTurn}
-                durationMs={avatarDuration}
-                landmarksUrl={avatarLandmarks}
-                onSigningDone={() => goTo(step === 'avatar_question' ? 'user_name' : 'done')}
-              />
-            </div>
+      <div className="practice-split">
+        {/* Left: avatar */}
+        <div className="practice-pane">
+          <span className="practice-pane__label">Awatar</span>
+          <div className="practice-pane__media">
+            <ConversationAvatar
+              signing={isAvatarTurn}
+              signVideoUrl={signVideoUrl}
+              playbackRate={SIGN_PLAYBACK_RATE}
+              onSigningDone={() => goTo(step === 'avatar_question' ? 'user_name' : 'wrap')}
+            />
+          </div>
+          <div className="chat-controls">
             {isAvatarTurn && (
-              <span className="practice-pane__label" style={{ justifyContent: 'center', marginTop: 4 }}>
+              <span className="translator-status">
                 <span className="signing-dot" /><span className="signing-dot" /><span className="signing-dot" />
+                Miga…
               </span>
             )}
             {!isAvatarTurn && step !== 'intro' && (
-              <span className="practice-pane__label" style={{ justifyContent: 'center', color: 'var(--green)' }}>
-                Słucha…
-              </span>
+              <span className="translator-status" style={{ color: 'var(--green)' }}>Czeka…</span>
+            )}
+            {(isAvatarTurn || step === 'wrap') && (
+              <>
+                <div className="gloss-chips" style={{ justifyContent: 'center' }}>
+                  {['CZEŚĆ', 'MIŁO', 'TY', 'POZNAĆ'].map(g => (
+                    <span key={g} className="phrase-gesture-chip live-gloss-chip">{g}</span>
+                  ))}
+                </div>
+                <p className="chat-recognized">
+                  Tłumaczenie: <strong>Cześć, miło cię poznać</strong>
+                </p>
+              </>
             )}
           </div>
-
-          {/* Right: user turn */}
-          <div className="practice-pane">
-            <span className="practice-pane__label">Twoja kolej</span>
-            <div className="practice-pane__media chat-right-pane">
-
-              {step === 'intro' && (
-                <div className="chat-step chat-step--intro">
-                  <div className="chat-bubble chat-bubble--avatar">
-                    <p>Awatar cię przywita. Zamigaj <strong>CZEŚĆ</strong> w odpowiedzi.</p>
-                  </div>
-                  <button className="primary-button" onClick={() => goTo('user_greet')} type="button">
-                    <Icon name="play" size={15} /> Zacznij
-                  </button>
-                </div>
-              )}
-
-              {step === 'user_greet' && (
-                <UserGreetPanel onDone={() => goTo('avatar_question')} />
-              )}
-
-              {step === 'avatar_question' && (
-                <div className="chat-step">
-                  <div className="chat-bubble chat-bubble--avatar">
-                    <p>Awatar pyta o twoje imię — poczekaj, aż skończy migać.</p>
-                  </div>
-                </div>
-              )}
-
-              {step === 'user_name' && (
-                <UserNamePanel onDone={(name) => { setUserName(name); goTo('avatar_meet') }} />
-              )}
-
-              {step === 'avatar_meet' && (
-                <div className="chat-step">
-                  <div className="chat-bubble chat-bubble--avatar">
-                    <p>Awatar się z tobą wita!</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
-      )}
+
+        {/* Right: user */}
+        <div className="practice-pane">
+          <span className="practice-pane__label">Twoja kolej</span>
+
+          {step === 'intro' && (
+            <div className="practice-pane__media chat-pane-center">
+              <button className="primary-button" onClick={() => goTo('user_greet')} type="button">
+                <Icon name="play" size={15} /> Zacznij
+              </button>
+            </div>
+          )}
+
+          {step === 'user_greet' && (
+            <UserRecordPanel onDone={() => goTo('avatar_question')} />
+          )}
+
+          {(step === 'avatar_question' || step === 'avatar_meet') && (
+            <div className="practice-pane__media chat-pane-center">
+              <p className="chat-recognized">Poczekaj, aż awatar skończy migać.</p>
+            </div>
+          )}
+
+          {step === 'user_name' && (
+            <UserRecordPanel onDone={() => goTo('avatar_meet')} />
+          )}
+
+          {step === 'wrap' && (
+            <div className="practice-pane__media chat-pane-center">
+              <p className="chat-recognized">Możesz wrócić do listy rozmów.</p>
+            </div>
+          )}
+        </div>
+      </div>
     </main>
   )
 }
 
 
-// ── User greet step ───────────────────────────────────────────────────────────
+// ── Record turn — auto-advance 3s after recognition/translation arrives ───────
 
-function UserGreetPanel({ onDone }: { onDone: () => void }) {
-  const { state, result, error, start, stop, reset } = useRecorder(['CZEŚĆ'])
-  const passed = result && result.score >= 50
+function UserRecordPanel({ onDone }: { onDone: () => void }) {
+  const { state, result, error, videoRef, start, stop } = useRecorder([], { preview: true })
+  const recording = state === 'recording'
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const onDoneRef = useRef(onDone)
+  useEffect(() => { onDoneRef.current = onDone }, [onDone])
+
+  useEffect(() => {
+    if (!result) {
+      setCountdown(null)
+      return
+    }
+    setCountdown(AFTER_RESULT_DELAY_MS / 1000)
+    const started = Date.now()
+    const tick = setInterval(() => {
+      const left = Math.ceil((AFTER_RESULT_DELAY_MS - (Date.now() - started)) / 1000)
+      setCountdown(Math.max(0, left))
+    }, 200)
+    const done = setTimeout(() => {
+      clearInterval(tick)
+      onDoneRef.current()
+    }, AFTER_RESULT_DELAY_MS)
+    return () => {
+      clearInterval(tick)
+      clearTimeout(done)
+    }
+  }, [result])
 
   return (
-    <div className="chat-step">
-      <div className="chat-bubble chat-bubble--user">
-        <p>Zamigaj <strong>CZEŚĆ</strong></p>
+    <>
+      <div className="practice-pane__media">
+        <video
+          ref={videoRef}
+          className="practice-video practice-video--mirror"
+          muted
+          playsInline
+        />
+        {recording && <span className="record-indicator" />}
       </div>
-      <RecordControls state={state} error={error} onStart={start} onStop={stop} />
-      {result && <GradePanel result={result} expectedGlosses={['CZEŚĆ']} />}
-      {result && (
-        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
-          {!passed && <button className="back-button" onClick={reset} type="button">Spróbuj ponownie</button>}
-          <button className="primary-button" onClick={onDone} type="button">
-            {passed ? 'Dalej' : 'Pomiń'}
+
+      <div className="chat-controls">
+        {state === 'idle' && (
+          <button className="primary-button" onClick={start} type="button">
+            <Icon name="play" size={15} /> Nagraj
           </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── User name step ────────────────────────────────────────────────────────────
-
-function UserNamePanel({ onDone }: { onDone: (name: string) => void }) {
-  const { state, result, error, start, stop } = useRecorder([])
-
-  return (
-    <div className="chat-step">
-      <div className="chat-bubble chat-bubble--user">
-        <p>Zamigaj swoje imię</p>
-      </div>
-      <RecordControls state={state} error={error} onStart={start} onStop={stop} />
-      {result && (
-        <div style={{ marginTop: 10 }}>
-          {result.glosses.length > 0 && (
-            <p style={{ fontSize: 13, color: 'var(--muted)', margin: '0 0 8px' }}>
-              Rozpoznano: <strong>{result.glosses.join(' ')}</strong>
-            </p>
-          )}
-          <button className="primary-button" onClick={() => onDone(result.glosses[0] ?? 'nieznajomy')} type="button">
-            Dalej
+        )}
+        {state === 'recording' && (
+          <button className="stop-button" onClick={stop} type="button">
+            <Icon name="pause" size={15} /> Zatrzymaj
+            <span className="record-indicator record-indicator--inline" />
           </button>
-        </div>
-      )}
-    </div>
-  )
-}
+        )}
+        {state === 'grading' && (
+          <span className="translator-status"><span className="spinner" /> Rozpoznawanie…</span>
+        )}
+        {state === 'error' && (
+          <span className="translator-status translator-status--error">
+            <Icon name="info" size={16} /> {error}
+          </span>
+        )}
 
-// ── Done screen ───────────────────────────────────────────────────────────────
-
-function DoneStep({ onRestart, onBack }: { onRestart: () => void; onBack: () => void }) {
-  return (
-    <div className="chat-step chat-step--done">
-      <div className="contrib-success__icon"><Icon name="check" size={32} /></div>
-      <h3>Rozmowa zakończona!</h3>
-      <p>Udało ci się przeprowadzić pierwszą rozmowę w PJM.</p>
-      <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
-        <button className="back-button" onClick={onRestart} type="button">Zacznij od nowa</button>
-        <button className="primary-button" onClick={onBack} type="button">Wróć do listy</button>
+        {result && (
+          <>
+            {result.glosses.length > 0 && (
+              <p className="chat-recognized">
+                Rozpoznano: <strong>{result.glosses.join(' ')}</strong>
+              </p>
+            )}
+            {result.translation && (
+              <p className="chat-recognized">
+                Tłumaczenie: <strong>{result.translation}</strong>
+              </p>
+            )}
+            {countdown != null && (
+              <span className="translator-status">
+                Awatar odpowie za {countdown}s…
+              </span>
+            )}
+          </>
+        )}
       </div>
-    </div>
-  )
-}
-
-// ── Shared record controls ────────────────────────────────────────────────────
-
-type RCProps = {
-  state: ReturnType<typeof useRecorder>['state']
-  error: string | null
-  onStart: () => void
-  onStop: () => void
-}
-
-function RecordControls({ state, error, onStart, onStop }: RCProps) {
-  return (
-    <div className="record-bar" style={{ marginTop: 12 }}>
-      {state === 'idle' && (
-        <button className="primary-button" onClick={onStart} type="button">
-          <Icon name="play" size={15} /> Nagraj
-        </button>
-      )}
-      {state === 'recording' && (
-        <button className="stop-button" onClick={onStop} type="button">
-          <Icon name="pause" size={15} /> Zatrzymaj
-          <span className="record-indicator record-indicator--inline" />
-        </button>
-      )}
-      {state === 'grading' && (
-        <span className="translator-status"><span className="spinner" /> Ocenianie…</span>
-      )}
-      {state === 'error' && (
-        <span className="translator-status translator-status--error">
-          <Icon name="info" size={16} /> {error}
-        </span>
-      )}
-    </div>
+    </>
   )
 }

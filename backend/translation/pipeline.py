@@ -47,7 +47,12 @@ class SignLanguagePipeline:
         self.translator = translator
         self.segmenter = SignSegmenter(models_dir / "segmenter", device)
         classifier_dir = Path(os.environ.get("SIGN_CLASSIFIER_DIR", models_dir))
-        self.classifier = GlossClassifier(classifier_dir / "classifier.pth", classifier_dir / "labels.json", device)
+        # Override via .env: SIGN_CLASSIFIER_WEIGHTS / SIGN_CLASSIFIER_LABELS
+        weights = Path(os.environ.get("SIGN_CLASSIFIER_WEIGHTS", classifier_dir / "classifier.pth"))
+        labels = Path(os.environ.get("SIGN_CLASSIFIER_LABELS", classifier_dir / "labels.json"))
+        self.classifier = GlossClassifier(weights, labels, device)
+        self.classifier_weights = weights
+        self.classifier_labels = labels
 
     def recognize(self, video_path: str | Path, debug: bool = False) -> RecognitionResult:
         return self.recognize_pose(extract_pose(video_path), debug)

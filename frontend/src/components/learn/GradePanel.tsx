@@ -20,7 +20,7 @@ export function GradePanel({ result, expectedGlosses }: Props) {
 
       <div className="grade-details">
         <p className="grade-verdict">
-          {perfect ? '🎉 Idealnie!' : good ? 'Nieźle, ćwicz dalej!' : 'Spróbuj jeszcze raz'}
+          {perfect ? 'Idealnie' : good ? 'Nieźle, ćwicz dalej' : 'Spróbuj jeszcze raz'}
         </p>
 
         {/* Expected vs matched */}

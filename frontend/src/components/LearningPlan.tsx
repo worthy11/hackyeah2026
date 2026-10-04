@@ -13,9 +13,9 @@ export function LearningPlan({ onNavigate }: { onNavigate: (label: string) => vo
 
       <section className="next-steps">
         <h3>Następne kroki</h3>
-        <button className="step-row" onClick={() => onNavigate('Słownictwo')} type="button">
-          <span className="step-icon step-icon--yellow"><Icon name="vocabulary" size={18} /></span>
-          <span className="step-copy"><strong>Powtórka słówek</strong><small>5 zwrotów <span>·</span> około 3 min</small></span>
+        <button className="step-row" onClick={() => onNavigate('Nauka')} type="button">
+          <span className="step-icon step-icon--yellow"><Icon name="dashboard" size={18} /></span>
+          <span className="step-copy"><strong>Kontynuuj naukę</strong><small>kolejna lekcja <span>·</span> około 3 min</small></span>
           <Icon name="arrow" size={17} />
         </button>
         <button className="step-row" onClick={() => onNavigate('Rozmowy')} type="button">

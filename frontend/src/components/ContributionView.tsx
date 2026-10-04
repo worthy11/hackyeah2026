@@ -99,10 +99,12 @@ export function ContributionView() {
     <main className="learn-view">
       {status === 'done' ? (
         <div className="contrib-success">
-          <div className="contrib-success__icon"><Icon name="check" size={28} /></div>
-          <div>
-            <strong>{uploadType === 'gesture' ? `Gest „${gloss}" został dodany!` : 'Zdanie zostało dodane!'}</strong>
-            <p>Nagranie zapisano, trwa ekstrakcja punktów charakterystycznych…</p>
+          <div className="contrib-success__body">
+            <div className="contrib-success__icon"><Icon name="check" size={28} /></div>
+            <div>
+              <strong>{uploadType === 'gesture' ? `Gest „${gloss}" został dodany` : 'Zdanie zostało dodane'}</strong>
+              <p>Nagranie zapisano, trwa ekstrakcja punktów charakterystycznych…</p>
+            </div>
           </div>
           <button className="primary-button" onClick={reset} type="button">Dodaj kolejne</button>
         </div>
@@ -163,11 +165,24 @@ export function ContributionView() {
                   onChange={e => { const f = e.target.files?.[0]; if (f) setFile(f) }} />
               </div>
             ) : (
-              <div className="upload-selected">
-                <Icon name="materials" size={18} />
-                <span>{file.name}</span>
-                <span className="upload-size">{(file.size / 1024 / 1024).toFixed(1)} MB</span>
-                <button className="back-button" onClick={() => { setFile(null); setSegments([]); setMarkerStart(null); if (fileRef.current) fileRef.current.value = '' }} type="button">Usuń</button>
+              <div className="contrib-file">
+                <span className="contrib-file__icon"><Icon name="materials" size={18} /></span>
+                <div className="contrib-file__meta">
+                  <strong>{file.name}</strong>
+                  <small>{(file.size / 1024 / 1024).toFixed(1)} MB</small>
+                </div>
+                <button
+                  className="contrib-file__remove"
+                  onClick={() => {
+                    setFile(null)
+                    setSegments([])
+                    setMarkerStart(null)
+                    if (fileRef.current) fileRef.current.value = ''
+                  }}
+                  type="button"
+                >
+                  Usuń
+                </button>
               </div>
             )}
           </div>
@@ -184,27 +199,37 @@ export function ContributionView() {
             <div className="marker-section">
               <video ref={videoRef} src={videoURL} className="marker-video" controls />
 
-              <p className="form-label" style={{ marginTop: 12 }}>
-                Zaznacz granice gestów
-              </p>
-
-              <div className="marker-controls">
-                <input className="form-input" style={{ flex: 1 }} type="text"
-                  placeholder="Glos (np. CZEŚĆ)" value={pendingGloss}
-                  onChange={e => setPendingGloss(e.target.value.toUpperCase())} />
-                <button className="primary-button primary-button--sm"
-                  disabled={markerStart !== null} onClick={addMarkerStart} type="button">
-                  ▶ Start gestu
-                </button>
-                <button className="primary-button primary-button--sm"
-                  disabled={markerStart == null || !pendingGloss.trim()} onClick={addMarkerEnd} type="button">
-                  ■ Koniec gestu
-                </button>
+              <div className="marker-block">
+                <span className="form-label">Zaznacz granice gestów</span>
+                <input
+                  className="form-input"
+                  type="text"
+                  placeholder="Glos (np. CZEŚĆ)"
+                  value={pendingGloss}
+                  onChange={e => setPendingGloss(e.target.value.toUpperCase())}
+                />
+                <div className="marker-controls">
+                  <button
+                    className="contrib-btn contrib-btn--ghost"
+                    disabled={markerStart !== null}
+                    onClick={addMarkerStart}
+                    type="button"
+                  >
+                    <Icon name="play" size={14} /> Start gestu
+                  </button>
+                  <button
+                    className="contrib-btn contrib-btn--solid"
+                    disabled={markerStart == null || !pendingGloss.trim()}
+                    onClick={addMarkerEnd}
+                    type="button"
+                  >
+                    <Icon name="pause" size={14} /> Koniec gestu
+                  </button>
+                </div>
+                {markerStart != null && (
+                  <p className="marker-hint">Start zaznaczony: {(markerStart / 1000).toFixed(2)}s — odtwórz do końca gestu</p>
+                )}
               </div>
-
-              {markerStart != null && (
-                <p className="marker-hint">Start: {(markerStart / 1000).toFixed(2)}s</p>
-              )}
 
               {segments.length > 0 && (
                 <div className="segment-list">
@@ -212,7 +237,9 @@ export function ContributionView() {
                     <div key={i} className="segment-row">
                       <span className="phrase-gesture-chip">{s.gloss}</span>
                       <span className="sign-frames">{(s.start_ms / 1000).toFixed(2)}s – {(s.end_ms / 1000).toFixed(2)}s</span>
-                      <button className="back-button" onClick={() => removeSegment(i)} type="button">Usuń</button>
+                      <button className="contrib-btn contrib-btn--text" onClick={() => removeSegment(i)} type="button">
+                        Usuń
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -226,17 +253,20 @@ export function ContributionView() {
             </div>
           )}
 
-          <div className="translator-actions" style={{ paddingLeft: 0 }}>
-            <button className="primary-button"
+          <div className="contrib-actions">
+            <button
+              className="primary-button"
               disabled={
                 !file || status === 'uploading' ||
                 (uploadType === 'gesture' && !gloss.trim()) ||
                 (uploadType === 'phrase' && (!translation.trim() || segments.length === 0))
               }
-              onClick={submit} type="button">
+              onClick={submit}
+              type="button"
+            >
               {status === 'uploading'
-                ? <><span className="spinner" style={{ borderTopColor: 'white', borderColor: 'rgba(255,255,255,.3)', width: 16, height: 16, flex: 'none' }} /> Przetwarzanie…</>
-                : 'Dodaj do biblioteki'}
+                ? <><span className="spinner contrib-actions__spinner" /> Przetwarzanie…</>
+                : <><Icon name="upload" size={15} /> Dodaj do biblioteki</>}
             </button>
           </div>
         </div>

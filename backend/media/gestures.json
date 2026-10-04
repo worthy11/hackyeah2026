@@ -3,25 +3,25 @@
     "id": -1,
     "gloss": "CZEŚĆ",
     "category_id": 1,
-    "video_file": "gesture_1.mp4",
+    "video_file": "czesc.mp4",
     "start_ms": null,
     "end_ms": null,
     "landmarks_file": null
   },
   {
     "id": -2,
-    "gloss": "DZIĘKUJĘ",
+    "gloss": "CZUJĘ SIĘ DOBRZE, A TY?",
     "category_id": 1,
-    "video_file": "gesture_2.mp4",
+    "video_file": "samopoczucie.mp4",
     "start_ms": null,
     "end_ms": null,
     "landmarks_file": null
   },
   {
     "id": -3,
-    "gloss": "DO WIDZENIA",
-    "category_id": 1,
-    "video_file": "gesture_3.mp4",
+    "gloss": "B",
+    "category_id": 7,
+    "video_file": "b.mp4",
     "start_ms": null,
     "end_ms": null,
     "landmarks_file": null

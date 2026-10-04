@@ -6,16 +6,15 @@ type NavigationItem = { label: string; icon: IconName }
 type NavigationProps = { activeItem: string; onNavigate: (label: string) => void }
 
 const learningItems = [
-  { label: 'Tłumacz',        icon: 'translate'     },
-  { label: 'Moja nauka',     icon: 'dashboard'     },
-  { label: 'Słownictwo',     icon: 'vocabulary'    },
-  { label: 'Rozmowy',        icon: 'conversation'  },
-  { label: 'Moje materiały', icon: 'materials'     },
+  { label: 'Tłumacz', icon: 'translate'    },
+  { label: 'Nauka',   icon: 'dashboard'    },
+  { label: 'Rozmowy', icon: 'conversation' },
 ] satisfies NavigationItem[]
 
 const communityItems = [
-  { label: 'Dodaj nagranie', icon: 'upload' },
-  { label: 'O projekcie',    icon: 'info'   },
+  { label: 'Dodaj nagranie', icon: 'upload'    },
+  { label: 'Moje materiały', icon: 'materials' },
+  { label: 'Zasoby',         icon: 'info'      },
 ] satisfies NavigationItem[]
 
 function NavigationLinks({ activeItem, onNavigate, items }: NavigationProps & { items: NavigationItem[] }) {
@@ -37,9 +36,12 @@ export function Sidebar({ activeItem, onNavigate }: NavigationProps) {
   const { user, setUser } = useUser()
   const [switcherOpen, setSwitcherOpen] = useState(false)
 
-  const visibleCommunity = communityItems.filter(item =>
-    item.label !== 'Dodaj nagranie' || user.role === 'contributor'
-  )
+  const visibleCommunity = communityItems.filter(item => {
+    if (item.label === 'Dodaj nagranie' || item.label === 'Moje materiały') {
+      return user.role === 'contributor'
+    }
+    return true
+  })
 
   return (
     <aside className="sidebar">
@@ -49,12 +51,8 @@ export function Sidebar({ activeItem, onNavigate }: NavigationProps) {
       </button>
 
       <nav aria-label="Nawigacja główna" className="side-navigation">
-        <p className="nav-heading">Nauka</p>
-        <NavigationLinks
-          activeItem={activeItem}
-          items={learningItems.filter(i => i.label !== 'Moje materiały' || user.role === 'contributor')}
-          onNavigate={onNavigate}
-        />
+        <p className="nav-heading">Rozwiązania</p>
+        <NavigationLinks activeItem={activeItem} items={learningItems} onNavigate={onNavigate} />
         <div className="nav-divider" />
         <p className="nav-heading">Społeczność</p>
         <NavigationLinks activeItem={activeItem} items={visibleCommunity} onNavigate={onNavigate} />
@@ -100,7 +98,7 @@ export function MobileNavigation({ activeItem, onNavigate }: NavigationProps) {
   const { user } = useUser()
   const items = [
     ...learningItems.slice(0, 3),
-    ...(user.role === 'contributor' ? [{ label: 'Dodaj nagranie', icon: 'upload' as IconName }] : [{ label: 'O projekcie', icon: 'info' as IconName }]),
+    ...(user.role === 'contributor' ? [{ label: 'Dodaj nagranie', icon: 'upload' as IconName }] : [{ label: 'Zasoby', icon: 'info' as IconName }]),
   ]
   return (
     <nav aria-label="Nawigacja mobilna" className="mobile-navigation">
@@ -113,7 +111,7 @@ export function MobileNavigation({ activeItem, onNavigate }: NavigationProps) {
           type="button"
         >
           <Icon name={icon} size={19} />
-          <span>{label === 'Moja nauka' ? 'Nauka' : label}</span>
+          <span>{label}</span>
         </button>
       ))}
     </nav>

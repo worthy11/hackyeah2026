@@ -14,31 +14,34 @@ export type GestureVideo = {
 export type GlossVersions = Record<string, GestureVideo[]>
 
 let cache: GlossVersions | null = null
-let fetchPromise: Promise<void> | null = null
 
 export function useGestureVideos() {
   const [versions, setVersions] = useState<GlossVersions>(cache ?? {})
-  const [loading, setLoading]   = useState(!cache)
+  const [loading, setLoading] = useState(!cache)
 
   useEffect(() => {
-    if (cache) { setVersions(cache); setLoading(false); return }
-    if (!fetchPromise) {
-      fetchPromise = fetch('/api/contributions/gestures')
-        .then(r => r.ok ? r.json() : [])
-        .then((data: GestureVideo[]) => {
-          const grouped: GlossVersions = {}
-          for (const g of data) {
-            const key = g.gloss.toUpperCase().trim()
-            grouped[key] = [...(grouped[key] ?? []), g]
-          }
-          cache = grouped
-        })
-        .catch(() => { cache = {} })
-    }
-    fetchPromise.then(() => {
-      setVersions(cache ?? {})
-      setLoading(false)
-    })
+    let cancelled = false
+    fetch('/api/contributions/gestures')
+      .then(r => (r.ok ? r.json() : []))
+      .then((data: GestureVideo[]) => {
+        const grouped: GlossVersions = {}
+        for (const g of data) {
+          const key = g.gloss.toUpperCase().trim()
+          grouped[key] = [...(grouped[key] ?? []), g]
+        }
+        cache = grouped
+        if (!cancelled) {
+          setVersions(grouped)
+          setLoading(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setVersions(cache ?? {})
+          setLoading(false)
+        }
+      })
+    return () => { cancelled = true }
   }, [])
 
   return { versions, loading }
@@ -46,5 +49,4 @@ export function useGestureVideos() {
 
 export function invalidateGestureCache() {
   cache = null
-  fetchPromise = null
 }

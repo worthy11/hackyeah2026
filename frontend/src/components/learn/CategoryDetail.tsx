@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Icon } from '../Icon'
-import { gestures, phrases, gestureMap, type Category, type Gesture, type Phrase } from '../../data/mockLearning'
+import { categoryColor, gestures, phrases, gestureMap, type Category, type Gesture, type Phrase } from '../../data/mockLearning'
 import { GesturePractice } from './GesturePractice'
 import { PhrasePractice } from './PhrasePractice'
 
@@ -24,7 +24,13 @@ export function CategoryDetail({ category, onBack }: Props) {
       </button>
 
       <header className="learn-header">
-        <span className="category-tile__icon category-tile__icon--lg">
+        <span
+          className="category-tile__icon category-tile__icon--lg"
+          style={{
+            color: categoryColor(category.id).fg,
+            background: categoryColor(category.id).bg,
+          }}
+        >
           <Icon name={category.icon} size={28} />
         </span>
         <h2>{category.name}</h2>
